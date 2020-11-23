@@ -41,7 +41,8 @@ def change_type(data):
 
 # @hydra.main(config_path="config", config_name="config.yaml", strict=False)
 def run():
-    cfg = OmegaConf.load('../input/src-code0/src/test.yaml')
+    on_kaggle = False  # change me True if you use kaggle
+    cfg = OmegaConf.load(f"{'../input/src-code0' if on_kaggle else './'}/src/test.yaml")
     # os.chdir(utils.get_original_cwd())
     #     log.info(OmegaConf.to_yaml(cfg))
     cfg['device'] = 'cpu'
@@ -50,7 +51,7 @@ def run():
     verbose = 0
     local_path = '../'
     path = f'../input/lish-moa'
-    path_model = f'../input/models0'
+    path_model = f"{'../input/models0' if on_kaggle else '../models'}"
     cfg['path_model'] = path_model
     # data_load
     train_features = pd.read_csv(f'{path}/train_features.csv')
