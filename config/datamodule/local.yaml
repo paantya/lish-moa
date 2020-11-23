@@ -1,0 +1,4 @@
+# @package _group_
+batch_size: 128
+num_workers: 0
+shuffle: false

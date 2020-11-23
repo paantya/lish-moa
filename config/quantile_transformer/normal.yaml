@@ -1,0 +1,3 @@
+# @package _group_
+n_quantiles: 100
+output_distribution: normal

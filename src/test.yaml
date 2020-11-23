@@ -1,0 +1,31 @@
+model:
+  nfolds: 7
+  nseed: 1
+  epochs: 25
+  lr: 0.001
+  weight_decay: 1.0e-05
+  early_stopping_steps: 10
+  early_stop: false
+  hidden_size: 1500
+  dropout_model: 0.25
+  n_comp_genes: 463
+  n_comp_cells: 60
+  variance_threshold_for_fs: 0.9
+  v: 0
+  patch1: 0
+  train_models: 0
+pl:
+  _target_: pytorch_lightning.Trainer
+  gpus: 1
+  default_root_dir: ../model/
+  max_epochs: 100
+  min_epochs: 5
+  log_gpu_memory: all
+  gradient_clip_val: 0.5
+datamodule:
+  batch_size: 128
+  num_workers: 0
+  shuffle: false
+quantile_transformer:
+  n_quantiles: 100
+  output_distribution: normal
