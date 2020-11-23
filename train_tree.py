@@ -20,8 +20,10 @@ def run():
     #  2   cp_time  int64
     #  3   cp_dose  object
 
-    print(train.info('all'))
-    print(train.head(1))
+    # train = train.drop('cp_type', axis=1)
+    # test = test.drop('cp_type', axis=1)
+    # train = train.drop('cp_dose', axis=1)
+    # test = test.drop('cp_dose', axis=1)
     get_xgboost(train=train, targets=targets, test=test, NFOLDS=2)
 
 if __name__ == '__main__':

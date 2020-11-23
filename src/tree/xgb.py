@@ -24,7 +24,7 @@ def get_xgboost(train, targets, test, NFOLDS=7):
 
     classifier = MultiOutputClassifier(XGBClassifier(tree_method='gpu_hist'))
     clf = Pipeline([
-        # ('encode', CountEncoder(cols=[0, 2])),
+        ('encode', CountEncoder(cols=[0, 2])),
         ('classify', classifier)
                     ])
 

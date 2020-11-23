@@ -1,4 +1,5 @@
 import os
+import gc
 import sys
 import hydra
 import torch
@@ -34,7 +35,7 @@ os.listdir('../input/lish-moa')
 
 @hydra.main(config_path="config", config_name="config.yaml", strict=False)
 def run(cfg: DictConfig) -> None:
-    os.chdir(utils.get_original_cwd())
+    os.chdir(hydra.utils.get_original_cwd())
     log.info(OmegaConf.to_yaml(cfg))
     cfg['device'] = ('cuda' if torch.cuda.is_available() else 'cpu')
     cfg['list_seed'] = [i for i in range(cfg.model.nseed)]
