@@ -69,6 +69,8 @@ def preprocess_data(data, patch1=False):
         cp_dose_int = data['cp_dose'].map({"D1": 1., "D2": 0.})
         cp_time_int = data['cp_time'].map({24: 1., 48: 2., 72: 3.})
     data = pd.get_dummies(data, columns=['cp_time', 'cp_dose'])
+    if 'cp_type' in data.columns:
+        data = pd.get_dummies(data, columns=['cp_type'])
     if patch1:
         data['cp_dose_int'] = cp_dose_int
         data['cp_time_int'] = cp_time_int

@@ -1,7 +1,7 @@
 import numpy as np # linear algebra
 import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
 
-from xgboost import XGBClassifier
+from xgboost import XGBClassifier, XGBRegressor
 from sklearn.model_selection import KFold
 from category_encoders import CountEncoder
 from sklearn.pipeline import Pipeline
@@ -14,6 +14,60 @@ from sklearn.multioutput import MultiOutputClassifier
 import os
 import warnings
 warnings.filterwarnings('ignore')
+
+def metric(y_true, y_pred):
+    metrics = []
+    metrics.append(log_loss(y_true, y_pred.astype(float), labels=[0,1]))
+    return np.mean(metrics)
+
+def get_xgboost1(train, targets, test, sub, NFOLDS=7):
+    train_score = targets
+
+
+    train = train.iloc[:, 1:]
+    test = test.iloc[:, 1:]
+    train_score = targets.iloc[:, 1:]
+    sample = sub
+
+    cols = train_score.columns
+    submission = sample.copy()
+    submission.loc[:, train_score.columns] = 0
+    # test_preds = np.zeros((test.shape[0], train_score.shape[1]))
+    oof_loss = 0
+
+    for c, column in enumerate(cols, 1):
+        y = train_score[column]
+        total_loss = 0
+
+        for fn, (trn_idx, val_idx) in enumerate(KFold(n_splits=NFOLDS, shuffle=True).split(train)):
+            print('Fold: ', fn + 1)
+            X_train, X_val = train.iloc[trn_idx], train.iloc[val_idx]
+            y_train, y_val = y.iloc[trn_idx], y.iloc[val_idx]
+
+            model = XGBRegressor(tree_method='gpu_hist',
+                                 min_child_weight=31.58,
+                                 learning_rate=0.05,
+                                 colsample_bytree=0.65,
+                                 gamma=3.69,
+                                 max_delta_step=2.07,
+                                 max_depth=10,
+                                 n_estimators=166,
+                                 subsample=0.86)
+
+            model.fit(X_train, y_train)
+            pred = model.predict(X_val)
+            # pred = [n if n>0 else 0 for n in pred]
+            loss = metric(y_val, pred)
+            total_loss += loss
+            predictions = model.predict(test)
+            # predictions = [n if n>0 else 0 for n in predictions]
+            submission[column] += predictions / NFOLDS
+
+        submission[column] = submission[column]/NFOLDS
+        oof_loss += total_loss / NFOLDS
+        print("Model " + str(c) + ": Loss =" + str(total_loss / NFOLDS))
+    submission.loc[test['cp_type'] == 1, train_score.columns] = 0
+    return submission
 
 
 def get_xgboost(train, targets, test, NFOLDS=7):

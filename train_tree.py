@@ -1,6 +1,7 @@
 import os
 import pandas as pd
-from src.tree.xgb import get_xgboost
+from src.tree.xgb import get_xgboost, get_xgboost1
+from src.data.process_data import preprocess_data
 
 
 def run():
@@ -24,7 +25,10 @@ def run():
     # test = test.drop('cp_type', axis=1)
     # train = train.drop('cp_dose', axis=1)
     # test = test.drop('cp_dose', axis=1)
-    get_xgboost(train=train, targets=targets, test=test, NFOLDS=2)
+
+    train = preprocess_data(train)
+    test = preprocess_data(test)
+    get_xgboost1(train=train, targets=targets, test=test, sub=sub, NFOLDS=2)
 
 if __name__ == '__main__':
     run()
