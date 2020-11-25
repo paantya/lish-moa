@@ -20,7 +20,7 @@ pd.set_option('max_columns', 2000)
 
 ##########################
 
-sys.path.append('../input/iterativestratification')
+sys.path.append('../../../input/iterativestratification')
 from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 
 sys.path.append('../input/src-code0')
@@ -206,10 +206,19 @@ def run(cfg: DictConfig) -> None:
 
         print("CV log_loss: ", score)
 
-    sub = sample_submission.drop(columns=target_cols).merge(test[['sig_id'] + target_cols], on='sig_id',
-                                                            how='left').fillna(0)
-    sub.to_csv('submission.csv', index=False)
-    log.info(f"sub.shape: {sub.shape}")
+    # sub = sample_submission.drop(columns=target_cols).merge(test[['sig_id'] + target_cols], on='sig_id',
+    #                                                         how='left').fillna(0)
+    # sub.to_csv('submission.csv', index=False)
+    # log.info(f"sub.shape: {sub.shape}")
+
+    res = test[['sig_id'] + target_cols]
+    corner_case = test_features[test_features['cp_type'] == 'ctl_vehicle']
+    zeros = np.zeros((corner_case.shape[0], len(target_cols)))
+    corner_case[target_cols] = zeros
+    corner_case = corner_case[['sig_id'] + target_cols]
+    res = pd.concat([res, corner_case], axis=0)
+
+    res.to_csv('submission.csv', index=False)
 
     if cfg.model.train_models:
         return score
