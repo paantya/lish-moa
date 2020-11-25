@@ -14,5 +14,18 @@ def zip():
     os.chdir(f"{old_path}")
 
 
+    # path_model = './src'
+    # name = 'src'
+    # # old_path = os.getcwd()
+    # # os.chdir(f"{path_model}/")
+    # with zipfile.ZipFile(f'/srv/data/apatshin_docker/data/input/{name}.zip', 'w') as myzip:
+    #     for file in os.listdir():
+    #         if 'src' in file and '.zip' not in file:
+    #             print(file)
+    #             myzip.write(file)
+    #
+    # # os.chdir(f"{old_path}")
+
+
 if __name__ == '__main__':
     zip()
