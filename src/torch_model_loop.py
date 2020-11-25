@@ -76,12 +76,14 @@ def inference_fn_original(model, dataloader, device):
 
 def inference_fn(model, dataloader, device, batch_size=128):
     model.eval()
-    preds = np.zeros((len(dataloader), 206))
+    preds = np.zeros((len(dataloader)*batch_size, 206))
 
     for ind, batch in enumerate(dataloader):
         with torch.no_grad():
             pred = model(batch['x'].to(device)).sigmoid().detach().cpu().numpy()
-        preds[ind * batch_size: (ind + 1) * batch_size] = pred
+        preds[ind * batch_size: ind * batch_size + pred.shape[0]] = pred
+        if pred.shape[0] != batch_size:
+            preds = preds[:-(batch_size-pred.shape[0])]
 
     gc.collect()
     return preds
@@ -93,10 +95,11 @@ def run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, nu
     log = logging.getLogger(f"{__name__}.{inspect.currentframe().f_code.co_name}")
     set_seed(seed)
 
-    train = preprocess_data(folds, hparams.model.patch1)
     test_ = preprocess_data(test, hparams.model.patch1)
 
     if hparams.model.train_models:
+        train = preprocess_data(folds, hparams.model.patch1)
+
         trn_idx = train[train['kfold'] != fold].index
         val_idx = train[train['kfold'] == fold].index
 
@@ -111,7 +114,7 @@ def run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, nu
         trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=hparams.datamodule.batch_size,
                                                   num_workers=hparams.datamodule.num_workers, shuffle=True)
         validloader = torch.utils.data.DataLoader(valid_dataset, batch_size=hparams.datamodule.batch_size,
-                                              num_workers=hparams.datamodule.num_workers, shuffle=False)
+                                                  num_workers=hparams.datamodule.num_workers, shuffle=False)
         model = Model(
             num_features=num_features,
             num_targets=num_targets,
@@ -163,8 +166,7 @@ def run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, nu
 
     # --------------------- PREDICTION---------------------
     x_test = test_[feature_cols].values
-    testdataset = TestDataset(x_test)
-    testloader = torch.utils.data.DataLoader(testdataset, batch_size=hparams.datamodule.batch_size, shuffle=False)
+    testloader = torch.utils.data.DataLoader(TestDataset(x_test), batch_size=hparams.datamodule.batch_size, shuffle=False)
 
     model = Model(
         num_features=num_features,
@@ -178,7 +180,6 @@ def run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, nu
                                      ))
     model.to(hparams['device'])
 
-    predictions = np.zeros((len(test_), target.iloc[:, 1:].shape[1]))
     predictions = inference_fn(model, testloader, hparams['device'], hparams.datamodule.batch_size)
     del model
     gc.collect()
@@ -192,7 +193,8 @@ def run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, nu
 def run_k_fold(NFOLDS, seed, hparams, folds, train, test, feature_cols, target_cols, num_features,
                num_targets, target, verbose):
     log = logging.getLogger(f"{__name__}.{inspect.currentframe().f_code.co_name}")
-    oof = np.zeros((len(train), len(target_cols)))
+    if hparams.model.train_models:
+        oof = np.zeros((len(train), len(target_cols)))
     predictions = np.zeros((len(test), len(target_cols)))
 
     for fold in tqdm(range(NFOLDS), 'run_k_fold', leave=verbose):

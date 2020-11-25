@@ -63,6 +63,8 @@ def run():
     train_features = change_type(train_features)
     test_features = change_type(test_features)
     train_targets_scored = change_type(train_targets_scored)
+
+    print(f"test_features.shape: {test_features.shape}")
     #     sample_submission = pd.read_csv(f'{path}/sample_submission.csv')
     #     sub = pd.read_csv(f'{path}/sample_submission.csv')
 
@@ -170,7 +172,9 @@ def run():
     # Train
     ##################################################
     SEED = cfg['list_seed']
-    oof = np.zeros((len(train), len(target_cols)))
+
+    if cfg.model.train_models:
+        oof = np.zeros((len(train), len(target_cols)))
     predictions = np.zeros((len(test), len(target_cols)))
 
     for seed in tqdm(SEED, leave=verbose):
@@ -220,7 +224,8 @@ def run():
     #     sub.to_csv('submission.csv', index=False)
     #     log.info(f"sub.shape: {sub.shape}")
 
-    print(test[['sig_id'] + target_cols].shape)
+    print(f"pred.shape", test[['sig_id'] + target_cols].shape)
+    print(f"res.shape: ", res[['sig_id'] + target_cols].shape)
     if cfg.model.train_models:
         return score
     else:

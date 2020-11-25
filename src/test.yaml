@@ -24,7 +24,7 @@ pl:
   gradient_clip_val: 0.5
 datamodule:
   batch_size: 128
-  num_workers: 7
+  num_workers: 0
   shuffle: false
 quantile_transformer:
   n_quantiles: 100

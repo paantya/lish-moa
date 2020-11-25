@@ -204,7 +204,7 @@ def run(cfg: DictConfig) -> None:
             score_ = log_loss(y_true[:, i], y_pred[:, i])
             score += score_ / num_targets
 
-        print("CV log_loss: ", score)
+        log.info("CV log_loss: ", score)
 
     sub = sample_submission.drop(columns=target_cols).merge(test[['sig_id'] + target_cols], on='sig_id',
                                                             how='left').fillna(0)
