@@ -56,6 +56,7 @@ def run():
     # data_load
     train_features = pd.read_csv(f'{path}/train_features.csv')
     test_features = pd.read_csv(f'{path}/test_features.csv')
+    # test_features
     train_targets_scored = pd.read_csv(f'{path}/train_targets_scored.csv')
     #     train_targets_nonscored = pd.read_csv(f'{path}/train_targets_nonscored.csv')
 
@@ -206,7 +207,14 @@ def run():
 
         print("CV log_loss: ", score)
 
-    test[['sig_id'] + target_cols].to_csv('submission.csv', index=False)
+    res = test[['sig_id'] + target_cols]
+    corner_case = test_features[test_features['cp_type'] == 'ctl_vehicle']
+    zeros = np.zeros((corner_case.shape[0], len(target_cols)))
+    corner_case[target_cols] = zeros
+    corner_case = corner_case[['sig_id'] + target_cols]
+    res = pd.concat([res, corner_case], axis=0)
+
+    res.to_csv('submission.csv', index=False)
     #     sub = sub.drop(columns=target_cols).merge(test[['sig_id'] + target_cols], on='sig_id',
     #                                                             how='left').fillna(0)
     #     sub.to_csv('submission.csv', index=False)
