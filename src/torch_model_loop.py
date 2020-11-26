@@ -55,8 +55,7 @@ def valid_fn(model, loss_fn, dataloader, device):
     gc.collect()
     return final_loss, valid_preds
 
-
-def inference_fn(model, dataloader, device):
+def inference_fn_original(model, dataloader, device):
     model.eval()
     preds = []
 
@@ -72,6 +71,20 @@ def inference_fn(model, dataloader, device):
 
     gc.collect()
     return preds
+
+
+def inference_fn(model, dataloader, device, batch_size=128):
+    model.eval()
+    preds = np.zeros((len(dataloader)*batch_size, 206))
+
+    for ind, batch in enumerate(dataloader):
+        with torch.no_grad():
+            pred = model(batch['x'].to(device)).sigmoid().detach().cpu().numpy()
+        preds[ind * batch_size: ind * batch_size + pred.shape[0]] = pred
+        if pred.shape[0] != batch_size:
+            preds = preds[:-(batch_size-pred.shape[0])]
+
+    gc.collect()
 
 # run train one model
 def run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, num_features, num_targets, target,
