@@ -38,7 +38,7 @@ def run(cfg: DictConfig) -> None:
     log.info(OmegaConf.to_yaml(cfg))
     cfg['device'] = ('cuda' if torch.cuda.is_available() else 'cpu')
     cfg['list_seed'] = [i for i in range(cfg.model.nseed)]
-    verbose = 0
+    verbose = 1
     local_path = '../'
     path = f'{local_path}input/lish-moa'
     path_model = f'{local_path}models'
@@ -151,7 +151,9 @@ def run(cfg: DictConfig) -> None:
     ##################################################
     feature_cols = [c for c in preprocess_data(folds, cfg.model.patch1).columns if c not in target_cols]
     feature_cols = [c for c in feature_cols if c not in ['kfold', 'sig_id']]
-
+    print(f"feature_cols.len(): {len(feature_cols)}")
+    print(f"train.shape: {train.shape}")
+    print(f"test.shape: {test.shape}")
     if verbose:
         print(f"Preprocessing")
     if verbose:
@@ -173,7 +175,7 @@ def run(cfg: DictConfig) -> None:
 
     for seed in tqdm(SEED, leave=verbose):
         return_run_k_fold = run_k_fold(cfg.model.nfolds, seed, cfg, folds, train, test, feature_cols, target_cols,
-                                       num_features, num_targets, target, verbose)
+                                       num_features, num_targets, target, verbose, test_features)
         if cfg.model.train_models:
             oof_, predictions_ = return_run_k_fold
             oof += oof_ / len(SEED)
@@ -204,7 +206,7 @@ def run(cfg: DictConfig) -> None:
             score_ = log_loss(y_true[:, i], y_pred[:, i])
             score += score_ / num_targets
 
-        log.info("CV log_loss: ", score)
+        log.info("CV log_loss: {score}")
 
     # sub = sample_submission.drop(columns=target_cols).merge(test[['sig_id'] + target_cols], on='sig_id',
     #                                                         how='left').fillna(0)

@@ -1,6 +1,6 @@
 model:
   nfolds: 7
-  nseed: 7
+  nseed: 1
   epochs: 25
   lr: 0.001
   weight_decay: 1.0e-05

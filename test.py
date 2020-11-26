@@ -31,6 +31,7 @@ from src.data.process_data import set_seed, preprocess_data, from_yml, \
 
 os.listdir('../input/lish-moa')
 
+
 def change_type(data):
     for k, v in data.dtypes.items():
         if v == 'float64':
@@ -38,6 +39,7 @@ def change_type(data):
         if v == 'int64':
             data[k] = data[k].astype('int8')
     return data
+
 
 # @hydra.main(config_path="config", config_name="config.yaml", strict=False)
 def run():
@@ -51,7 +53,7 @@ def run():
     verbose = 0
     local_path = '../'
     path = f'../input/lish-moa'
-    path_model = f"{'../input/models0' if on_kaggle else '../models'}"
+    path_model = f"{'/kaggle/input/models0' if on_kaggle else '../models'}"
     cfg['path_model'] = path_model
     # data_load
     train_features = pd.read_csv(f'{path}/train_features.csv')
@@ -63,6 +65,12 @@ def run():
     train_features = change_type(train_features)
     test_features = change_type(test_features)
     train_targets_scored = change_type(train_targets_scored)
+
+    print(f"test_features.shape: {test_features.shape}")
+    test_features = pd.concat([test_features,test_features,test_features,test_features], axis=0)
+    test_features.index = range(test_features.shape[0])
+
+    print(f"test_features.shape: {test_features.shape}")
     #     sample_submission = pd.read_csv(f'{path}/sample_submission.csv')
     #     sub = pd.read_csv(f'{path}/sample_submission.csv')
 
@@ -88,12 +96,12 @@ def run():
     ##################################################
 
     train_features_return, test_features_return = get_pca_transform(train_features, test_features, features=GENES,
-                                      n_components=cfg.model.n_comp_genes, flag='GENES')
+                                                                    n_components=cfg.model.n_comp_genes, flag='GENES')
     train_features = pd.concat((train_features, train_features_return), axis=1)
     test_features = pd.concat((test_features, test_features_return), axis=1)
 
     train_features_return, test_features_return = get_pca_transform(train_features, test_features, features=CELLS,
-                                      n_components=cfg.model.n_comp_cells, flag='CELLS')
+                                                                    n_components=cfg.model.n_comp_cells, flag='CELLS')
     train_features = pd.concat((train_features, train_features_return), axis=1)
     test_features = pd.concat((test_features, test_features_return), axis=1)
 
@@ -170,12 +178,14 @@ def run():
     # Train
     ##################################################
     SEED = cfg['list_seed']
-    oof = np.zeros((len(train), len(target_cols)))
+
+    if cfg.model.train_models:
+        oof = np.zeros((len(train), len(target_cols)))
     predictions = np.zeros((len(test), len(target_cols)))
 
     for seed in tqdm(SEED, leave=verbose):
         return_run_k_fold = run_k_fold(cfg.model.nfolds, seed, cfg, folds, train, test, feature_cols, target_cols,
-                                       num_features, num_targets, target, verbose)
+                                       num_features, num_targets, target, verbose, test_features)
         if cfg.model.train_models:
             oof_, predictions_ = return_run_k_fold
             oof += oof_ / len(SEED)
@@ -220,7 +230,8 @@ def run():
     #     sub.to_csv('submission.csv', index=False)
     #     log.info(f"sub.shape: {sub.shape}")
 
-    print(test[['sig_id'] + target_cols].shape)
+    print(f"pred.shape", test[['sig_id'] + target_cols].shape)
+    print(f"res.shape: ", res[['sig_id'] + target_cols].shape)
     if cfg.model.train_models:
         return score
     else:

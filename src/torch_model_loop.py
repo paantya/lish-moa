@@ -1,9 +1,10 @@
 
 import torch
-
+import os
 import inspect
 import logging
 import numpy as np
+import pandas as pd
 import torch.nn as nn
 import torch.optim as optim
 from tqdm.auto import tqdm
@@ -85,33 +86,38 @@ def inference_fn(model, dataloader, device, batch_size=128):
             preds = preds[:-(batch_size-pred.shape[0])]
 
     gc.collect()
+    return preds
 
 # run train one model
 def run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, num_features, num_targets, target,
-                 verbose=False):
+                 verbose=False, test_features=None):
 
     log = logging.getLogger(f"{__name__}.{inspect.currentframe().f_code.co_name}")
     set_seed(seed)
 
-    train = preprocess_data(folds, hparams.model.patch1)
+    print(f"test.shape: {test.shape}")
     test_ = preprocess_data(test, hparams.model.patch1)
-
-    trn_idx = train[train['kfold'] != fold].index
-    val_idx = train[train['kfold'] == fold].index
-
-    train_df = train[train['kfold'] != fold].reset_index(drop=True)
-    valid_df = train[train['kfold'] == fold].reset_index(drop=True)
-
-    x_train, y_train = train_df[feature_cols].values, train_df[target_cols].values
-    x_valid, y_valid = valid_df[feature_cols].values, valid_df[target_cols].values
-    #     print(f"check sum fold {fold}: train_x={x_train.sum().sum()}, train_y={y_train.sum().sum()}")
-    train_dataset = MoADataset(x_train, y_train)
-    valid_dataset = MoADataset(x_valid, y_valid)
-    trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=hparams.datamodule.batch_size,
-                                              num_workers=hparams.datamodule.num_workers, shuffle=True)
-    validloader = torch.utils.data.DataLoader(valid_dataset, batch_size=hparams.datamodule.batch_size,
-                                              num_workers=hparams.datamodule.num_workers, shuffle=False)
+    print(f"test_.shape: {test_.shape}")
+    print(f"num_features: {num_features}")
+    return 0
     if hparams.model.train_models:
+        train = preprocess_data(folds, hparams.model.patch1)
+
+        trn_idx = train[train['kfold'] != fold].index
+        val_idx = train[train['kfold'] == fold].index
+
+        train_df = train[train['kfold'] != fold].reset_index(drop=True)
+        valid_df = train[train['kfold'] == fold].reset_index(drop=True)
+
+        x_train, y_train = train_df[feature_cols].values, train_df[target_cols].values
+        x_valid, y_valid = valid_df[feature_cols].values, valid_df[target_cols].values
+        #     print(f"check sum fold {fold}: train_x={x_train.sum().sum()}, train_y={y_train.sum().sum()}")
+        train_dataset = MoADataset(x_train, y_train)
+        valid_dataset = MoADataset(x_valid, y_valid)
+        trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=hparams.datamodule.batch_size,
+                                                  num_workers=hparams.datamodule.num_workers, shuffle=True)
+        validloader = torch.utils.data.DataLoader(valid_dataset, batch_size=hparams.datamodule.batch_size,
+                                                  num_workers=hparams.datamodule.num_workers, shuffle=False)
         model = Model(
             num_features=num_features,
             num_targets=num_targets,
@@ -142,7 +148,7 @@ def run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, nu
             train_loss = train_fn(model, optimizer, scheduler, loss_tr, trainloader, hparams['device'])
             valid_loss, valid_preds = valid_fn(model, loss_fn, validloader, hparams['device'])
             log.debug(f"sd: {seed:>2} fld: {fold:>2}, ep: {epoch:>3}, tr_loss: {train_loss:.6f}, "
-                         f"vl_loss: {valid_loss:.6f}, doff_val: {last_valid_loss - valid_loss:>7.1e}")
+                      f"vl_loss: {valid_loss:.6f}, doff_val: {last_valid_loss - valid_loss:>7.1e}")
             last_valid_loss = valid_loss
 
             if np.isnan(valid_loss):
@@ -154,7 +160,7 @@ def run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, nu
 
                 best_loss = valid_loss
                 oof[val_idx] = valid_preds
-                torch.save(model.state_dict(), f"{hparams.path_model}/S{seed}_FOLD{fold}_.pth")
+                torch.save(model.state_dict(), f"{hparams.path_model}/S{seed}FOLD{fold}.pth")
 
             elif (hparams.model.early_stop == True):
 
@@ -169,21 +175,37 @@ def run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, nu
     # --------------------- PREDICTION---------------------
     x_test = test_[feature_cols].values
     testdataset = TestDataset(x_test)
-    testloader = torch.utils.data.DataLoader(testdataset, batch_size=hparams.datamodule.batch_size, shuffle=False)
+    testloader = torch.utils.data.DataLoader(testdataset, batch_size=hparams.datamodule.batch_size,
+                                             num_workers=hparams.datamodule.num_workers, shuffle=False)
 
     model = Model(
         num_features=num_features,
         num_targets=num_targets,
         hidden_size=hparams.model.hidden_size,
-
+        dropout=hparams.model.dropout_model,
     )
 
-    model.load_state_dict(torch.load(f"{hparams['path_model']}/S{seed}_FOLD{fold}_.pth",
+    print(f"[s{seed}][f{fold}] loading models: {hparams['path_model']}/S{seed}FOLD{fold}.pth")
+
+    if os.path.exists(f"{hparams['path_model']}/S{seed}FOLD{fold}_.pth"):
+        print(f"model exists `{hparams['path_model']}/S{seed}FOLD{fold}.pth`")
+        res = test_features['sig_id'].to_frame()
+        res[target_cols] = np.zeros((test_features.shape[0], 206))
+        res.to_csv('submission.csv', index=False)
+        print(f"zero res.shape: {res.shape}")
+    else:
+        print(f"model not exists `{hparams['path_model']}/S{seed}FOLD{fold}.pth`")
+        res = test_features['sig_id'].to_frame()
+        res[target_cols] = np.ones((test_features.shape[0], 206))
+        res.to_csv('submission.csv', index=False)
+        print(f"zero res.shape: {res.shape}")
+
+    model.load_state_dict(torch.load(f"{hparams['path_model']}/S{seed}FOLD{fold}.pth",
                                      map_location=torch.device(hparams['device'])
                                      ))
+
     model.to(hparams['device'])
 
-    predictions = np.zeros((len(test_), target.iloc[:, 1:].shape[1]))
     predictions = inference_fn(model, testloader, hparams['device'])
     del model
     gc.collect()
@@ -195,7 +217,7 @@ def run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, nu
 
 # def run_k_fold
 def run_k_fold(NFOLDS, seed, hparams, folds, train, test, feature_cols, target_cols, num_features,
-                                       num_targets, target, verbose):
+                                       num_targets, target, verbose, test_features):
 
     log = logging.getLogger(f"{__name__}.{inspect.currentframe().f_code.co_name}")
     oof = np.zeros((len(train), len(target_cols)))
@@ -203,7 +225,7 @@ def run_k_fold(NFOLDS, seed, hparams, folds, train, test, feature_cols, target_c
 
     for fold in tqdm(range(NFOLDS), 'run_k_fold', leave=verbose):
         return_run = run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, num_features,
-                                       num_targets, target, verbose)
+                                       num_targets, target, verbose, test_features)
         if hparams.model.train_models:
             oof_, pred_ = return_run
             oof += oof_
