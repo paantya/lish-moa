@@ -132,7 +132,12 @@ def run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, nu
                          f"vl_loss: {valid_loss:.6f}, doff_val: {last_valid_loss - valid_loss:>7.1e}")
             last_valid_loss = valid_loss
 
+            if np.isnan(valid_loss):
+                log.info(f"valid_loss is nan")
             if valid_loss < best_loss:
+
+                if np.isnan(valid_loss):
+                    log.info(f"valid_loss is nan in save models.")
 
                 best_loss = valid_loss
                 oof[val_idx] = valid_preds
