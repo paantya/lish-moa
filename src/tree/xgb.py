@@ -1,7 +1,10 @@
+from datetime import datetime
 import numpy as np # linear algebra
 import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
+from tqdm.auto import tqdm as tqdm
 
 from xgboost import XGBClassifier, XGBRegressor
+import xgboost as xgb
 from sklearn.model_selection import KFold
 from category_encoders import CountEncoder
 from sklearn.pipeline import Pipeline
@@ -10,6 +13,10 @@ from sklearn.metrics import log_loss
 import matplotlib.pyplot as plt
 
 from sklearn.multioutput import MultiOutputClassifier
+
+import sys
+sys.path.append('../../../input/iterativestratification')
+from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 
 import os
 import warnings
@@ -20,7 +27,8 @@ def metric(y_true, y_pred):
     metrics.append(log_loss(y_true, y_pred.astype(float), labels=[0,1]))
     return np.mean(metrics)
 
-def get_xgboost1(train, targets, test, sub, NFOLDS=7):
+
+def get_xgboost_cv(train, targets, test, sub, NFOLDS=7):
     train_score = targets
 
 
@@ -39,35 +47,222 @@ def get_xgboost1(train, targets, test, sub, NFOLDS=7):
         y = train_score[column]
         total_loss = 0
 
-        for fn, (trn_idx, val_idx) in enumerate(KFold(n_splits=NFOLDS, shuffle=True).split(train)):
+        # CV = KFold(n_splits=NFOLDS, shuffle=True).split(train)
+        CV = MultilabelStratifiedKFold(n_splits=NFOLDS, random_state=42).split(X=train, y=train_score)
+
+        # print(f"train.shape: {train.shape}")
+        # print(f"train_score.shape: {train_score.shape}")
+        # print(f"y.shape: {y.shape}")
+
+
+        # model = xgb.cv(
+        #     params=params,
+        #     dtrain=trainDM,
+        #     folds=CV,
+        #     # num_boost_round=500,
+        #     early_stopping_rounds=10,
+        # )
+        # model.predict(testDM)
+
+        for fn, (trn_idx, val_idx) in enumerate(CV):
             print('Fold: ', fn + 1)
             X_train, X_val = train.iloc[trn_idx], train.iloc[val_idx]
             y_train, y_val = y.iloc[trn_idx], y.iloc[val_idx]
 
-            model = XGBRegressor(tree_method='gpu_hist',
-                                 min_child_weight=31.58,
-                                 learning_rate=0.05,
-                                 colsample_bytree=0.65,
-                                 gamma=3.69,
-                                 max_delta_step=2.07,
-                                 max_depth=10,
-                                 n_estimators=166,
-                                 subsample=0.86)
+            dtrain = xgb.DMatrix(X_train.values, label=y_train.values, feature_names=train.columns.values)
+            dtest = xgb.DMatrix(X_val.values, label=y_val.values, feature_names=train.columns.values)
 
-            model.fit(X_train, y_train)
-            pred = model.predict(X_val)
-            # pred = [n if n>0 else 0 for n in pred]
+            params = {
+                'booster': 'gbtree',
+                'tree_method': 'gpu_hist',
+                'min_child_weight': 31.58,
+                'learning_rate': 0.05,
+                'colsample_bytree': 0.65,
+                # 'gamma': 3.65,
+                'max_delta_step': 2.07,
+                'max_depth': 10,
+                'subsample': 0.86,
+                'verbosity': 1,
+
+            }
+            model = xgb.train(
+                params=params,
+                dtrain=dtrain,
+                num_boost_round=166,
+                # evals=[(dtrain, 'train'), (dtest, 'test')],
+                verbose_eval=5,
+            )
+            pred = model.predict(dtest)
+
             loss = metric(y_val, pred)
             total_loss += loss
-            predictions = model.predict(test)
+            print(f"loc loss: {loss}")
+            predictions = model.predict(xgb.DMatrix(test.values, feature_names=train.columns.values))
             # predictions = [n if n>0 else 0 for n in predictions]
             submission[column] += predictions / NFOLDS
+
+            # for score in ['weight', 'gain', 'cover', 'total_gain', 'total_cover']:
+            #     importance = model.get_score(importance_type=score).items()
+            #     if len(importance) > 0:
+            #         print(f"importance ({score}): {importance}")
 
         submission[column] = submission[column]/NFOLDS
         oof_loss += total_loss / NFOLDS
         print("Model " + str(c) + ": Loss =" + str(total_loss / NFOLDS))
     submission.loc[test['cp_type'] == 1, train_score.columns] = 0
     return submission
+
+
+def get_xgboost_fe(train, targets, test, sub, xgb_params, importance_type='weight', NFOLDS=7, verbosity=0):
+    """
+
+    :param train:
+    :param targets:
+    :param test:
+    :param sub:
+    :param xgb_params:
+    :param importance_type: (def.: 'weight') also choice ['weight', 'gain', 'cover', 'total_gain', 'total_cover']
+    :param NFOLDS:
+    :param verbosity:
+    :return:
+    """
+    train_score = targets
+
+
+    train = train.iloc[:, 1:]
+    test = test.iloc[:, 1:]
+    train_score = targets.iloc[:, 1:]
+    sample = sub
+
+    cols = train_score.columns
+    submission = sample.copy()
+    submission.loc[:, train_score.columns] = 0
+    # test_preds = np.zeros((test.shape[0], train_score.shape[1]))
+    oof_loss = 0
+
+    start_time = datetime.now()
+
+    fe_dict = {}
+    for column in train.columns.values:
+        fe_dict[column] = 0.0
+    for c, column in enumerate(tqdm(cols, 'models_one_cols'), 1):
+        y = train_score[column]
+        total_loss = 0
+
+        # CV = KFold(n_splits=NFOLDS, shuffle=True).split(train)
+        CV = MultilabelStratifiedKFold(n_splits=NFOLDS, random_state=42).split(X=train, y=train_score)
+
+        start_time_loc = datetime.now()
+        for fn, (trn_idx, val_idx) in enumerate(CV):
+            if verbosity > 1:
+                print('\rFold: ', fn + 1, end='')
+            X_train, X_val = train.iloc[trn_idx], train.iloc[val_idx]
+            y_train, y_val = y.iloc[trn_idx], y.iloc[val_idx]
+
+            model = XGBRegressor(
+                **xgb_params
+            )
+
+            model.fit(X_train, y_train, )
+
+            importance = model.get_booster().get_score(importance_type=importance_type).items()
+            if len(importance) < 1:
+                if verbosity:
+                    print(f"[column {c} ({column}), CV {fn}] importance len < 1")
+            else:
+                for k, v in importance:
+                    # print(f"{k}: {v}")
+                    fe_dict[k] += v/len(cols)
+            pred = model.predict(X_val)
+            # pred = [n if n>0 else 0 for n in pred]
+
+            loss = metric(y_val, pred)
+            total_loss += loss
+            predictions = model.predict(test)
+            # predictions = [n if n>0 else 0 for n in predictions]
+            submission[column] += predictions / NFOLDS
+
+        stop_time_loc = datetime.now()
+        submission[column] = submission[column]/NFOLDS
+        oof_loss += total_loss / NFOLDS
+
+        if verbosity > 1:
+            print(f"\r[{stop_time_loc - start_time_loc}] Model " + str(c) + ": Loss =" + str(total_loss / NFOLDS))
+
+    stop_time = datetime.now()
+
+    if verbosity:
+        print(f"[{stop_time - start_time}] oof_loss/len(cols): {oof_loss/len(cols)}")
+    # submission.loc[test['cp_type'] == 1, train_score.columns] = 0
+    return {k: v for k, v in sorted(fe_dict.items(), key=lambda kv: kv[1], reverse=True)}
+
+
+
+
+def get_xgboost1(train, targets, test, sub, xgb_params, NFOLDS=7, optimization=False, verbosity=0):
+    train_score = targets
+
+
+    train = train.iloc[:, 1:]
+    test = test.iloc[:, 1:]
+    train_score = targets.iloc[:, 1:]
+
+    sample = sub
+
+    cols = train_score.columns
+    submission = sample.copy()
+    submission.loc[:, train_score.columns] = 0
+    # test_preds = np.zeros((test.shape[0], train_score.shape[1]))
+    oof_loss = 0
+
+    start_time = datetime.now()
+    for c, column in enumerate(tqdm(cols, 'models_one_cols'), 1):
+        if c > 20:
+            break
+        y = train_score[column]
+        total_loss = 0
+
+        # CV = KFold(n_splits=NFOLDS, shuffle=True).split(train)
+        CV = MultilabelStratifiedKFold(n_splits=NFOLDS, random_state=42).split(X=train, y=train_score)
+
+        start_time_loc = datetime.now()
+        for fn, (trn_idx, val_idx) in enumerate(CV):
+            if verbosity > 1:
+                print('\rFold: ', fn + 1, end='')
+            X_train, X_val = train.iloc[trn_idx], train.iloc[val_idx]
+            y_train, y_val = y.iloc[trn_idx], y.iloc[val_idx]
+
+
+
+            model = XGBRegressor(
+                **xgb_params
+            )
+
+            model.fit(X_train, y_train, )
+            pred = model.predict(X_val)
+            # pred = [n if n>0 else 0 for n in pred]
+
+            loss = metric(y_val, pred)
+            total_loss += loss
+            predictions = model.predict(test)
+            # predictions = [n if n>0 else 0 for n in predictions]
+            submission[column] += predictions / NFOLDS
+
+        stop_time_loc = datetime.now()
+        submission[column] = submission[column]/NFOLDS
+        oof_loss += total_loss / NFOLDS
+        if verbosity > 1:
+            print(f"\r[{stop_time_loc - start_time_loc}] Model " + str(c) + ": Loss =" + str(total_loss / NFOLDS))
+
+    stop_time = datetime.now()
+
+    if verbosity:
+        print(f"[{stop_time - start_time}] oof_loss/len(cols): {oof_loss/len(cols)}")
+    # submission.loc[test['cp_type'] == 1, train_score.columns] = 0
+    if optimization:
+        return oof_loss/len(cols)
+    else:
+        return oof_loss/len(cols), submission
 
 
 def get_xgboost(train, targets, test, NFOLDS=7):
@@ -140,12 +335,59 @@ def get_xgboost(train, targets, test, NFOLDS=7):
 
 
 if __name__ == '__main__':
-
-    DATA_DIR = '../../../input/'
-
+    import xgboost as xgb
+    import sklearn
+    print(f"xgb.__version__: {xgb.__version__}")
+    print(f"sklearn.__version__: {sklearn.__version__}")
+    from src.data.process_data import preprocess_data
+    DATA_DIR = '../../../input/lish-moa/'
     train = pd.read_csv(DATA_DIR + 'train_features.csv')
     targets = pd.read_csv(DATA_DIR + 'train_targets_scored.csv')
 
     test = pd.read_csv(DATA_DIR + 'test_features.csv')
     sub = pd.read_csv(DATA_DIR + 'sample_submission.csv')
-    get_xgboost(train, targets, test)
+
+    #  0   sig_id   object
+    #  1   cp_type  object
+    #  2   cp_time  int64
+    #  3   cp_dose  object
+
+    # train = train.drop('cp_type', axis=1)
+    # test = test.drop('cp_type', axis=1)
+    # train = train.drop('cp_dose', axis=1)
+    # test = test.drop('cp_dose', axis=1)
+
+    train = preprocess_data(train)
+    test = preprocess_data(test)
+
+    # xgb_params = {
+    #     'booster': 'gbtree',
+    #     'tree_method': 'gpu_hist',
+    #     'min_child_weight': 31.58,
+    #     'learning_rate': 0.05,
+    #     'colsample_bytree': 0.65,
+    #     'gamma': 3.69,
+    #     'max_delta_step': 2.07,
+    #     'max_depth': 10,
+    #     'n_estimators': 166,
+    #     'subsample': 0.86,
+    #     'verbosity': 1,
+    # }
+    # get_xgboost1(train=train, targets=targets, test=test, sub=sub, xgb_params=xgb_params, NFOLDS=2, verbosity=2)
+
+    xgb_params = {
+        'booster': 'gbtree',
+        'tree_method': 'gpu_hist',
+        'learning_rate': 0.05,
+        'colsample_bytree': 0.65,
+        'max_depth': 10,
+        'n_estimators': 10,
+        'subsample': 0.86,
+        'verbosity': 1,
+    }
+    fe = get_xgboost_fe(train=train, targets=targets, test=test, sub=sub, xgb_params=xgb_params,
+                        importance_type='weight', NFOLDS=2, verbosity=1)
+    for k, v in fe.items():
+        print(f"{k}: {v}.")
+
+        # total_gain
