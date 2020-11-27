@@ -157,6 +157,16 @@ def run(cfg: DictConfig) -> None:
     num_features = len(feature_cols)
     num_targets = len(target_cols)
 
+    CV = MultilabelStratifiedKFold(n_splits=cfg.model.nfolds, random_state=42)
+
+    data_dict = {
+        'train': preprocess_data(train),
+        'target': target,
+        'test': preprocess_data(test),
+        'feature_cols': feature_cols,
+        'target_cols': target_cols
+    }
+
 
     # Averaging on multiple SEEDS
 
