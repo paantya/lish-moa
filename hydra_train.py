@@ -54,6 +54,7 @@ def run(cfg: DictConfig) -> None:
     train_features = change_type(train_features)
     test_features = change_type(test_features)
     train_targets_scored = change_type(train_targets_scored)
+    log.info(f"train_targets_scored.shape: {train_targets_scored.shape}")
     sample_submission = pd.read_csv(f'{path}/sample_submission.csv')
     # sub = pd.read_csv(f'{path}/sample_submission.csv')
 
@@ -199,6 +200,8 @@ def run(cfg: DictConfig) -> None:
 
         print(f"CV log_loss: {score}")
         log.info(f"CV log_loss: {score}")
+        log.info(f"y_true.shape: {y_true.shape}")
+        log.info(f"y_pred.shape: {y_pred.shape}")
 
     # sub = sample_submission.drop(columns=target_cols).merge(test[['sig_id'] + target_cols], on='sig_id',
     #                                                         how='left').fillna(0)

@@ -68,8 +68,8 @@ def run():
     train_targets_scored = change_type(train_targets_scored)
 
     print(f"test_features.shape: {test_features.shape}")
-    test_features = pd.concat([test_features,test_features,test_features,test_features], axis=0)
-    test_features.index = range(test_features.shape[0])
+    # test_features = pd.concat([test_features,test_features,test_features,test_features], axis=0)
+    # test_features.index = range(test_features.shape[0])
 
     print(f"test_features.shape: {test_features.shape}")
     #     sample_submission = pd.read_csv(f'{path}/sample_submission.csv')
@@ -209,6 +209,7 @@ def run():
                                                                              on='sig_id', how='left').fillna(0)
         y_pred = valid_results[target_cols].values
 
+
         score = 0
         for i in range(len(target_cols)):
             score_ = log_loss(y_true[:, i], y_pred[:, i])
@@ -216,6 +217,8 @@ def run():
 
         print(f"CV log_loss: {score}")
         log.info(f"CV log_loss: {score}")
+        log.info(f"y_true.shape: {y_true.shape}")
+        log.info(f"y_pred.shape: {y_pred.shape}")
 
     # sub = sample_submission.drop(columns=target_cols).merge(test[['sig_id'] + target_cols], on='sig_id',
     #                                                         how='left').fillna(0)
