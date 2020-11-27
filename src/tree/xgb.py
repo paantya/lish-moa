@@ -150,7 +150,7 @@ def get_xgboost_fe(train, targets, test, sub, xgb_params, importance_type='weigh
         total_loss = 0
 
         # CV = KFold(n_splits=NFOLDS, shuffle=True).split(train)
-        CV = MultilabelStratifiedKFold(n_splits=NFOLDS, random_state=42).split(X=train, y=train_score)
+        CV = MultilabelStratifiedKFold(n_splits=NFOLDS, random_state=42).split(X=train, y=targets)
 
         start_time_loc = datetime.now()
         for fn, (trn_idx, val_idx) in enumerate(CV):

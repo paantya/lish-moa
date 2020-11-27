@@ -151,13 +151,20 @@ def run(cfg: DictConfig) -> None:
     ##################################################
     # Preprocessing feature_cols
     ##################################################
+
     feature_cols = [c for c in preprocess_data(folds, cfg.model.patch1).columns if c not in target_cols]
     feature_cols = [c for c in feature_cols if c not in ['kfold', 'sig_id']]
     num_features = len(feature_cols)
     num_targets = len(target_cols)
 
-    # Averaging on multiple SEEDS
 
+    data_dict = {
+        'train': train,
+        'test': test,
+
+    }
+
+    # Averaging on multiple SEEDS
     #     print(f"target.columns: {target.columns}")
 
     ##################################################
