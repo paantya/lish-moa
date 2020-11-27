@@ -154,7 +154,9 @@ def load_and_preprocess_data(cfg, path, verbose=0):
         'target': target,
         'test': preprocess_data(test),
         'feature_cols': feature_cols,
-        'target_cols': target_cols
+        'target_cols': target_cols,
+        'train_targets_scored': train_targets_scored,
+        'test_features': test_features,
     }
     # base_model_def(data_dict, params, cv=CV, optimization=False, verbose=0):
     return data_dict

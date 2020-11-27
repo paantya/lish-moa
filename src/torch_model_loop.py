@@ -200,104 +200,125 @@ def run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, nu
 def run_training_fold(hparams, x_train, y_train, x_valid, y_valid, test, num_features, num_targets, seed, verbose=False):
 
     log = logging.getLogger(f"{__name__}.{inspect.currentframe().f_code.co_name}")
-    set_seed(seed)
-
-    test_ = test
-    if hparams.model.train_models:
-
-        #     print(f"check sum fold {fold}: train_x={x_train.sum().sum()}, train_y={y_train.sum().sum()}")
-        train_dataset = MoADataset(x_train, y_train)
-        valid_dataset = MoADataset(x_valid, y_valid)
-        trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=hparams.datamodule.batch_size,
-                                                  num_workers=hparams.datamodule.num_workers, shuffle=True)
-        validloader = torch.utils.data.DataLoader(valid_dataset, batch_size=hparams.datamodule.batch_size,
-                                                  num_workers=hparams.datamodule.num_workers, shuffle=False)
-        model = Model(
-            num_features=num_features,
-            num_targets=num_targets,
-            hidden_size=hparams.model.hidden_size,
-            dropout=hparams.model.dropout_model,
-        )
-
-        model.to(hparams['device'])
-
-        optimizer = torch.optim.Adam(model.parameters(), lr=hparams.model.lr,
-                                     weight_decay=hparams.model.weight_decay)
-        scheduler = optim.lr_scheduler.OneCycleLR(optimizer=optimizer, pct_start=0.1, div_factor=1e3,
-                                                  max_lr=1e-2, epochs=hparams.model.epochs,
-                                                  steps_per_epoch=len(trainloader))
-
-        loss_fn = nn.BCEWithLogitsLoss()
-        loss_tr = SmoothBCEwLogits(smoothing=0.001)
-
-        early_stopping_steps = hparams.model.early_stopping_steps
-        early_step = 0
-
-        oof = np.zeros((len(train), target.iloc[:, 1:].shape[1]))
-        best_loss = np.inf
-
-        last_valid_loss = 0.0
-        for epoch in range(hparams.model.epochs):
-
-            train_loss = train_fn(model, optimizer, scheduler, loss_tr, trainloader, hparams['device'])
-            valid_loss, valid_preds = valid_fn(model, loss_fn, validloader, hparams['device'])
-            log.debug(f"sd: {seed:>2} fld: {fold:>2}, ep: {epoch:>3}, tr_loss: {train_loss:.6f}, "
-                      f"vl_loss: {valid_loss:.6f}, doff_val: {last_valid_loss - valid_loss:>7.1e}")
-            last_valid_loss = valid_loss
-
-            if np.isnan(valid_loss):
-                log.info(f"valid_loss is nan")
-            if valid_loss < best_loss:
-
-                if np.isnan(valid_loss):
-                    log.info(f"valid_loss is nan in save models.")
-
-                best_loss = valid_loss
-                oof[val_idx] = valid_preds
-                torch.save(model.state_dict(), f"{hparams.path_model}/S{seed}FOLD{fold}.pth")
-
-            elif (hparams.model.early_stop == True):
-
-                early_step += 1
-                if (early_step >= early_stopping_steps):
-                    break
-
-        gc.collect()
-
-        log.debug('')
-
-    # --------------------- PREDICTION---------------------
-    x_test = test_[feature_cols].values
-    testdataset = TestDataset(x_test)
-    testloader = torch.utils.data.DataLoader(testdataset, batch_size=hparams.datamodule.batch_size,
-                                             num_workers=hparams.datamodule.num_workers, shuffle=False)
-
-    model = Model(
-        num_features=num_features,
-        num_targets=num_targets,
-        hidden_size=hparams.model.hidden_size,
-        dropout=hparams.model.dropout_model,
-    )
-
-    model.load_state_dict(torch.load(f"{hparams['path_model']}/S{seed}FOLD{fold}.pth",
-                                     map_location=torch.device(hparams['device'])
-                                     ))
-
-    model.to(hparams['device'])
-
-    predictions = inference_fn(model, testloader, hparams['device'])
-    del model
-    gc.collect()
-    if hparams.model.train_models:
-        return oof, predictions
-    else:
-
-        return predictions
 
 
 
 # def run_k_fold_nn
-run_k_fold_nn(data_dict, cfg, seed, verbose):
+def run_k_fold_nn(data_dict, hparams, cv, seed=42, file_prefix='m1', verbose=0):
+    log = logging.getLogger(f"{__name__}.{inspect.currentframe().f_code.co_name}")
+    set_seed(seed)
+
+    train = data_dict['train'].copy()
+    test = data_dict['test'].copy()
+    target = data_dict['target'].copy()
+    feature_cols = data_dict['feature_cols']
+    target_cols = data_dict['target_cols']
+
+
+    oof = np.zeros((len(data_dict['train']), len(data_dict['target_cols'])))
+    predictions = np.zeros((len(data_dict['test']), len(data_dict['target_cols'])))
+
+    total_loss = 0
+    for fold, (trn_idx, val_idx) in enumerate(tqdm(cv.split(X=train, y=target), 'run folds', leave=False)):
+        if hparams.model.train_models:
+            X_train, y_train, = train[feature_cols].iloc[trn_idx].values, target[target_cols].iloc[trn_idx].values
+            X_valid, y_valid = train[feature_cols].iloc[val_idx].values, target[target_cols].iloc[val_idx].values
+
+            train_dataset = MoADataset(X_train, y_train)
+            valid_dataset = MoADataset(X_valid, y_valid)
+            trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=hparams.datamodule.batch_size,
+                                                      num_workers=hparams.datamodule.num_workers, shuffle=True)
+            validloader = torch.utils.data.DataLoader(valid_dataset, batch_size=hparams.datamodule.batch_size,
+                                                      num_workers=hparams.datamodule.num_workers, shuffle=False)
+            model = Model(
+                num_features=len(feature_cols),
+                num_targets=len(target_cols),
+                hidden_size=hparams.model.hidden_size,
+                dropout=hparams.model.dropout_model,
+            )
+
+            model.to(hparams['device'])
+
+            optimizer = torch.optim.Adam(model.parameters(), lr=hparams.model.lr,
+                                         weight_decay=hparams.model.weight_decay)
+            scheduler = optim.lr_scheduler.OneCycleLR(optimizer=optimizer, pct_start=0.1, div_factor=1e3,
+                                                      max_lr=1e-2, epochs=hparams.model.epochs,
+                                                      steps_per_epoch=len(trainloader))
+
+            loss_fn = nn.BCEWithLogitsLoss()
+            loss_tr = SmoothBCEwLogits(smoothing=0.001)
+
+            early_stopping_steps = hparams.model.early_stopping_steps
+            early_step = 0
+
+            oof_ = np.zeros((len(train), target.iloc[:, 1:].shape[1]))
+            best_loss = np.inf
+
+            last_valid_loss = 0.0
+            for epoch in range(hparams.model.epochs):
+
+                train_loss = train_fn(model, optimizer, scheduler, loss_tr, trainloader, hparams['device'])
+                valid_loss, valid_preds = valid_fn(model, loss_fn, validloader, hparams['device'])
+                log.debug(f"sd: {seed:>2} fld: {fold:>2}, ep: {epoch:>3}, tr_loss: {train_loss:.6f}, "
+                          f"vl_loss: {valid_loss:.6f}, doff_val: {last_valid_loss - valid_loss:>7.1e}")
+                last_valid_loss = valid_loss
+
+                if np.isnan(valid_loss):
+                    log.info(f"valid_loss is nan")
+                if valid_loss < best_loss:
+
+                    if np.isnan(valid_loss):
+                        log.info(f"valid_loss is nan in save models.")
+
+                    best_loss = valid_loss
+                    oof_[val_idx] = valid_preds
+                    torch.save(model.state_dict(), f"{hparams.path_model}/{file_prefix}S{seed}FOLD{fold}.pth")
+
+                elif (hparams.model.early_stop == True):
+
+                    early_step += 1
+                    if (early_step >= early_stopping_steps):
+                        break
+
+            gc.collect()
+
+            log.debug('')
+
+        # --------------------- PREDICTION---------------------
+        testdataset = TestDataset(test[feature_cols].values)
+        testloader = torch.utils.data.DataLoader(testdataset, batch_size=hparams.datamodule.batch_size,
+                                                 num_workers=hparams.datamodule.num_workers, shuffle=False)
+
+        model = Model(
+            num_features=len(feature_cols),
+            num_targets=len(target_cols),
+            hidden_size=hparams.model.hidden_size,
+            dropout=hparams.model.dropout_model,
+        )
+
+        model.load_state_dict(torch.load(f"{hparams['path_model']}/{file_prefix}S{seed}FOLD{fold}.pth",
+                                         map_location=torch.device(hparams['device'])
+                                         ))
+
+        model.to(hparams['device'])
+
+        pred_ = inference_fn(model, testloader, hparams['device'])
+        del model
+        gc.collect()
+
+        if hparams.model.train_models:
+            oof += oof_
+        predictions += pred_ / hparams.model.nfolds
+
+    gc.collect()
+    if hparams.model.train_models:
+        return oof, predictions
+    else:
+        return predictions
+
+
+
+
 
 # def run_k_fold
 def run_k_fold(NFOLDS, seed, hparams, folds, train, test, feature_cols, target_cols, num_features,

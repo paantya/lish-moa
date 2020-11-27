@@ -64,8 +64,8 @@ def run(cfg: DictConfig) -> None:
     for seed in tqdm(SEED, leave=verbose):
         # base_model_def(data_dict, params, cv=CV, seed=seed, optimization=False, verbose=0)
         return_run_k_fold = run_k_fold_nn(data_dict, cfg, seed, verbose)
-        return_run_k_fold = run_k_fold(cfg.model.nfolds, seed, cfg, folds, train, test, feature_cols, target_cols,
-                                       num_features, num_targets, target, verbose)
+        # return_run_k_fold = run_k_fold(cfg.model.nfolds, seed, cfg, folds, train, test, feature_cols, target_cols,
+        #                                num_features, num_targets, target, verbose)
         if cfg.model.train_models:
             oof_, predictions_ = return_run_k_fold
             oof += oof_ / len(SEED)
@@ -73,6 +73,16 @@ def run(cfg: DictConfig) -> None:
             predictions_ = return_run_k_fold
         predictions += predictions_ / len(SEED)
         gc.collect()
+
+
+
+    train = data_dict['train'].copy()
+    test = data_dict['test'].copy()
+    target = data_dict['target'].copy()
+    feature_cols = data_dict['feature_cols']
+    target_cols = data_dict['target_cols']
+    train_targets_scored = data_dict['train_targets_scored']
+    test_features = data_dict['test_features']
 
     if cfg.model.train_models:
         train[target_cols] = oof
@@ -91,7 +101,7 @@ def run(cfg: DictConfig) -> None:
         score = 0
         for i in range(len(target_cols)):
             score_ = log_loss(y_true[:, i], y_pred[:, i])
-            score += score_ / num_targets
+            score += score_ / len(target_cols)
 
         print(f"CV log_loss: {score}")
         log.info(f"CV log_loss: {score}")
