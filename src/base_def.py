@@ -1,4 +1,4 @@
-def base_model_def(data_dict, hparams, cv, optimization=False, verbose=0):
+def base_model_def(data_dict, hparams, cv, seed=42, optimization=False, verbose=0):
     train = data_dict['train'].copy()
     test = data_dict['test'].copy()
     target = data_dict['target'].copy()
