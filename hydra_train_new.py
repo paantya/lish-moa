@@ -27,7 +27,7 @@ sys.path.append('../input/src-code0')
 sys.path.append('../input/models0')
 
 from src.load_preprocess import load_and_preprocess_data
-from src.torch_model_loop import run_k_fold
+from src.torch_model_loop import run_k_fold, run_k_fold_nn
 from src.data.process_data import set_seed, preprocess_data, change_type, from_yml, \
     quantile_transformer, get_pca_transform, split_with_variancethreshold
 
@@ -48,7 +48,6 @@ def run(cfg: DictConfig) -> None:
 
     # data_load
     data_dict = load_and_preprocess_data(cfg, path, verbose=1)
-
     CV = MultilabelStratifiedKFold(n_splits=cfg.model.nfolds, random_state=42)
 
     # Averaging on multiple SEEDS
@@ -63,6 +62,8 @@ def run(cfg: DictConfig) -> None:
     predictions = np.zeros((len(data_dict['test']), len(data_dict['target_cols'])))
 
     for seed in tqdm(SEED, leave=verbose):
+        # base_model_def(data_dict, params, cv=CV, seed=seed, optimization=False, verbose=0)
+        return_run_k_fold = run_k_fold_nn(data_dict, cfg, seed, verbose)
         return_run_k_fold = run_k_fold(cfg.model.nfolds, seed, cfg, folds, train, test, feature_cols, target_cols,
                                        num_features, num_targets, target, verbose)
         if cfg.model.train_models:
