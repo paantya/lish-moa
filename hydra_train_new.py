@@ -46,32 +46,29 @@ def run(cfg: DictConfig) -> None:
     cfg['path_model'] = path_model
     # print(os.listdir(f'{local_path}../'))
 
-    # data_load
+    ######################################
+    # data_load and preprocess
+    ######################################
     data_dict = load_and_preprocess_data(cfg, path, verbose=1)
+
+    ######################################
+    # CV
+    ######################################
     CV = MultilabelStratifiedKFold(n_splits=cfg.model.nfolds, random_state=42)
-
-    # Averaging on multiple SEEDS
-
-    #     print(f"target.columns: {target.columns}")
 
     ##################################################
     # Train
     ##################################################
-    SEED = cfg['list_seed']
     oof = np.zeros((len(data_dict['train']), len(data_dict['target_cols'])))
     predictions = np.zeros((len(data_dict['test']), len(data_dict['target_cols'])))
-
-    for seed in tqdm(SEED, leave=verbose):
-        # base_model_def(data_dict, params, cv=CV, seed=seed, optimization=False, verbose=0)
-        return_run_k_fold = run_k_fold_nn(data_dict, cfg, seed, verbose)
-        # return_run_k_fold = run_k_fold(cfg.model.nfolds, seed, cfg, folds, train, test, feature_cols, target_cols,
-        #                                num_features, num_targets, target, verbose)
+    for seed in tqdm(cfg['list_seed'], leave=verbose):
+        return_run_k_fold = run_k_fold_nn(data_dict, cfg, cv=CV, seed=seed, file_prefix='m1', verbose=verbose)
         if cfg.model.train_models:
             oof_, predictions_ = return_run_k_fold
-            oof += oof_ / len(SEED)
+            oof += oof_ / cfg.model.nseed
         else:
             predictions_ = return_run_k_fold
-        predictions += predictions_ / len(SEED)
+        predictions += predictions_ / cfg.model.nseed
         gc.collect()
 
 

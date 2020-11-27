@@ -32,7 +32,7 @@ from src.data.process_data import set_seed, preprocess_data, change_type, from_y
 
 os.listdir('../input/lish-moa')
 
-def load_and_preprocess_data(cfg, path, verbose=0):
+def load_and_preprocess_data(cfg, path, test_append=False, verbose=0):
     # data_load
     train_features = pd.read_csv(f'{path}/train_features.csv')
     test_features = pd.read_csv(f'{path}/test_features.csv')
@@ -71,7 +71,7 @@ def load_and_preprocess_data(cfg, path, verbose=0):
 
     train_features_return, test_features_return = \
         get_pca_transform(train_features, test_features, features=GENES, n_components=cfg.model.n_comp_genes,
-                          flag='GENES', test_append=False)
+                          flag='GENES', test_append=test_append)
     train_features = pd.concat((train_features, train_features_return), axis=1)
     test_features = pd.concat((test_features, test_features_return), axis=1)
     del train_features_return, test_features_return
@@ -79,7 +79,7 @@ def load_and_preprocess_data(cfg, path, verbose=0):
 
     train_features_return, test_features_return = \
         get_pca_transform(train_features, test_features, features=CELLS, n_components=cfg.model.n_comp_cells,
-                          flag='CELLS', test_append=False)
+                          flag='CELLS', test_append=test_append)
     train_features = pd.concat((train_features, train_features_return), axis=1)
     test_features = pd.concat((test_features, test_features_return), axis=1)
     del train_features_return, test_features_return
@@ -91,7 +91,7 @@ def load_and_preprocess_data(cfg, path, verbose=0):
         split_with_variancethreshold(train_features, test_features,
                                      variance_threshold_for_fs=cfg.model.variance_threshold_for_fs,
                                      categorical=['sig_id', 'cp_type', 'cp_time', 'cp_dose'],
-                                     test_append=False)
+                                     test_append=test_append)
     del train_features, test_features
     gc.collect()
     train_features = train_features_return
