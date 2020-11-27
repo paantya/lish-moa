@@ -11,8 +11,9 @@ def base_model_def(data_dict, hparams, cv, optimization=False, verbose=0):
         y = target[column]
         total_loss = 0
         for fn, (trn_idx, val_idx) in enumerate(cv.split(X=train, y=target)):
+            # X_train y_train, = train[feature_cols].iloc[trn_idx].values, target[target_cols].iloc[trn_idx].values
+            # X_valid, y_valid = train[feature_cols].iloc[val_idx].values, target[target_cols].iloc[val_idx].values
             X_train, X_val = train[feature_cols].iloc[trn_idx], train[feature_cols].iloc[val_idx]
-            # y_train, y_val = target[target_cols].iloc[trn_idx].values, target[target_cols].iloc[val_idx].values
             y_train, y_val = y.iloc[trn_idx], y.iloc[val_idx]
 
             pass

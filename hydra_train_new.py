@@ -59,8 +59,8 @@ def run(cfg: DictConfig) -> None:
     # Train
     ##################################################
     SEED = cfg['list_seed']
-    oof = np.zeros((len(train), len(target_cols)))
-    predictions = np.zeros((len(test), len(target_cols)))
+    oof = np.zeros((len(data_dict['train']), len(data_dict['target_cols'])))
+    predictions = np.zeros((len(data_dict['test']), len(data_dict['target_cols'])))
 
     for seed in tqdm(SEED, leave=verbose):
         return_run_k_fold = run_k_fold(cfg.model.nfolds, seed, cfg, folds, train, test, feature_cols, target_cols,
