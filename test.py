@@ -1,5 +1,6 @@
 # %% [code]
 import os
+import gc
 import sys
 import torch
 import logging
@@ -73,19 +74,20 @@ def run():
     print(f"test_features.shape: {test_features.shape}")
     #     sample_submission = pd.read_csv(f'{path}/sample_submission.csv')
     #     sub = pd.read_csv(f'{path}/sample_submission.csv')
-
     log.info(f"n_comp_genes: {cfg.model.n_comp_genes}, n_comp_cells: {cfg.model.n_comp_cells}, total: "
              f"{cfg.model.n_comp_genes + cfg.model.n_comp_cells}.")
 
     GENES = [col for col in train_features.columns if col.startswith('g-')]
     CELLS = [col for col in train_features.columns if col.startswith('c-')]
 
-    train_features_norm, test_features_norm = \
+    train_features_return, test_features_return = \
         quantile_transformer(train_features, test_features, features=GENES + CELLS,
                              n_quantiles=cfg.quantile_transformer.n_quantiles,
                              output_distribution=cfg.quantile_transformer.output_distribution)
-    train_features = train_features_norm
-    test_features = test_features_norm
+    del train_features, test_features
+    gc.collect()
+    train_features = train_features_return
+    test_features = test_features_return
     log.info(f"End prearation data transform.\n"
              f"train_features.shape: {train_features.shape}\n"
              f"test_features.shape: {test_features.shape}\n"
@@ -100,20 +102,26 @@ def run():
                           flag='GENES', test_append=False)
     train_features = pd.concat((train_features, train_features_return), axis=1)
     test_features = pd.concat((test_features, test_features_return), axis=1)
+    del train_features_return, test_features_return
+    gc.collect()
 
     train_features_return, test_features_return = \
         get_pca_transform(train_features, test_features, features=CELLS, n_components=cfg.model.n_comp_cells,
                           flag='CELLS', test_append=False)
     train_features = pd.concat((train_features, train_features_return), axis=1)
     test_features = pd.concat((test_features, test_features_return), axis=1)
-
+    del train_features_return, test_features_return
+    gc.collect()
     ##################################################
     # Start: Feature selection
     ##################################################
     train_features_return, test_features_return = \
         split_with_variancethreshold(train_features, test_features,
                                      variance_threshold_for_fs=cfg.model.variance_threshold_for_fs,
-                                     categorical=['sig_id', 'cp_type', 'cp_time', 'cp_dose'], test_append=False)
+                                     categorical=['sig_id', 'cp_type', 'cp_time', 'cp_dose'],
+                                     test_append=False)
+    del train_features, test_features
+    gc.collect()
     train_features = train_features_return
     test_features = test_features_return
 
@@ -154,41 +162,38 @@ def run():
               f"folds.shape: {folds.shape}"
               f"test.shape: {test.shape}"
               f"target.shape: {target.shape}"
-              #               f"sample_submission.shape: {sample_submission.shape}"
               )
 
+    gc.collect()
     ##################################################
     # Preprocessing feature_cols
     ##################################################
     feature_cols = [c for c in preprocess_data(folds, cfg.model.patch1).columns if c not in target_cols]
     feature_cols = [c for c in feature_cols if c not in ['kfold', 'sig_id']]
-
-    if verbose:
-        print(f"Preprocessing")
-    if verbose:
-        print(f"len(feature_cols): {len(feature_cols)}")
-
     num_features = len(feature_cols)
     num_targets = len(target_cols)
+
+    # Averaging on multiple SEEDS
+
+    #     print(f"target.columns: {target.columns}")
 
     ##################################################
     # Train
     ##################################################
     SEED = cfg['list_seed']
-
-    if cfg.model.train_models:
-        oof = np.zeros((len(train), len(target_cols)))
+    oof = np.zeros((len(train), len(target_cols)))
     predictions = np.zeros((len(test), len(target_cols)))
 
     for seed in tqdm(SEED, leave=verbose):
         return_run_k_fold = run_k_fold(cfg.model.nfolds, seed, cfg, folds, train, test, feature_cols, target_cols,
-                                       num_features, num_targets, target, verbose, test_features)
+                                       num_features, num_targets, target, verbose)
         if cfg.model.train_models:
             oof_, predictions_ = return_run_k_fold
             oof += oof_ / len(SEED)
         else:
             predictions_ = return_run_k_fold
         predictions += predictions_ / len(SEED)
+        gc.collect()
 
     if cfg.model.train_models:
         train[target_cols] = oof
@@ -199,12 +204,9 @@ def run():
     ##################################################
 
     if cfg.model.train_models:
+        y_true = train_targets_scored[target_cols].values
         valid_results = train_targets_scored.drop(columns=target_cols).merge(train[['sig_id'] + target_cols],
                                                                              on='sig_id', how='left').fillna(0)
-
-    y_true = train_targets_scored[target_cols].values
-
-    if cfg.model.train_models:
         y_pred = valid_results[target_cols].values
 
         score = 0
@@ -212,7 +214,13 @@ def run():
             score_ = log_loss(y_true[:, i], y_pred[:, i])
             score += score_ / num_targets
 
-        print("CV log_loss: ", score)
+        print(f"CV log_loss: {score}")
+        log.info(f"CV log_loss: {score}")
+
+    # sub = sample_submission.drop(columns=target_cols).merge(test[['sig_id'] + target_cols], on='sig_id',
+    #                                                         how='left').fillna(0)
+    # sub.to_csv('submission.csv', index=False)
+    # log.info(f"sub.shape: {sub.shape}")
 
     res = test[['sig_id'] + target_cols]
     corner_case = test_features[test_features['cp_type'] == 'ctl_vehicle']
@@ -222,13 +230,8 @@ def run():
     res = pd.concat([res, corner_case], axis=0)
 
     res.to_csv('submission.csv', index=False)
-    #     sub = sub.drop(columns=target_cols).merge(test[['sig_id'] + target_cols], on='sig_id',
-    #                                                             how='left').fillna(0)
-    #     sub.to_csv('submission.csv', index=False)
-    #     log.info(f"sub.shape: {sub.shape}")
-
-    print(f"pred.shape", test[['sig_id'] + target_cols].shape)
-    print(f"res.shape: ", res[['sig_id'] + target_cols].shape)
+    print(f"pred.shape: {test[['sig_id'] + target_cols].shape}")
+    print(f"res.shape: {res[['sig_id'] + target_cols].shape}")
     if cfg.model.train_models:
         return score
     else:

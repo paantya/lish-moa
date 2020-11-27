@@ -187,12 +187,9 @@ def run(cfg: DictConfig) -> None:
     ##################################################
 
     if cfg.model.train_models:
+        y_true = train_targets_scored[target_cols].values
         valid_results = train_targets_scored.drop(columns=target_cols).merge(train[['sig_id'] + target_cols],
                                                                          on='sig_id', how='left').fillna(0)
-
-    y_true = train_targets_scored[target_cols].values
-
-    if cfg.model.train_models:
         y_pred = valid_results[target_cols].values
 
         score = 0

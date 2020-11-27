@@ -1,6 +1,6 @@
 model:
   nfolds: 7
-  nseed: 1
+  nseed: 7
   epochs: 25
   lr: 0.001
   weight_decay: 1.0e-05
@@ -24,7 +24,7 @@ pl:
   gradient_clip_val: 0.5
 datamodule:
   batch_size: 128
-  num_workers: 7
+  num_workers: 0
   shuffle: false
 quantile_transformer:
   n_quantiles: 100
