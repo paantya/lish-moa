@@ -54,6 +54,7 @@ def run(cfg: DictConfig) -> None:
     train_features = change_type(train_features)
     test_features = change_type(test_features)
     train_targets_scored = change_type(train_targets_scored)
+    log.info(f"train_targets_scored.shape: {train_targets_scored.shape}")
     sample_submission = pd.read_csv(f'{path}/sample_submission.csv')
     # sub = pd.read_csv(f'{path}/sample_submission.csv')
 
@@ -151,20 +152,14 @@ def run(cfg: DictConfig) -> None:
     ##################################################
     # Preprocessing feature_cols
     ##################################################
-
     feature_cols = [c for c in preprocess_data(folds, cfg.model.patch1).columns if c not in target_cols]
     feature_cols = [c for c in feature_cols if c not in ['kfold', 'sig_id']]
     num_features = len(feature_cols)
     num_targets = len(target_cols)
 
 
-    data_dict = {
-        'train': train,
-        'test': test,
-
-    }
-
     # Averaging on multiple SEEDS
+
     #     print(f"target.columns: {target.columns}")
 
     ##################################################
@@ -194,12 +189,9 @@ def run(cfg: DictConfig) -> None:
     ##################################################
 
     if cfg.model.train_models:
+        y_true = train_targets_scored[target_cols].values
         valid_results = train_targets_scored.drop(columns=target_cols).merge(train[['sig_id'] + target_cols],
                                                                          on='sig_id', how='left').fillna(0)
-
-    y_true = train_targets_scored[target_cols].values
-
-    if cfg.model.train_models:
         y_pred = valid_results[target_cols].values
 
         score = 0
@@ -209,6 +201,8 @@ def run(cfg: DictConfig) -> None:
 
         print(f"CV log_loss: {score}")
         log.info(f"CV log_loss: {score}")
+        log.info(f"y_true.shape: {y_true.shape}")
+        log.info(f"y_pred.shape: {y_pred.shape}")
 
     # sub = sample_submission.drop(columns=target_cols).merge(test[['sig_id'] + target_cols], on='sig_id',
     #                                                         how='left').fillna(0)
