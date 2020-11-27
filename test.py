@@ -95,13 +95,15 @@ def run():
     # PCA
     ##################################################
 
-    train_features_return, test_features_return = get_pca_transform(train_features, test_features, features=GENES,
-                                                                    n_components=cfg.model.n_comp_genes, flag='GENES')
+    train_features_return, test_features_return = \
+        get_pca_transform(train_features, test_features, features=GENES, n_components=cfg.model.n_comp_genes,
+                          flag='GENES', test_append=False)
     train_features = pd.concat((train_features, train_features_return), axis=1)
     test_features = pd.concat((test_features, test_features_return), axis=1)
 
-    train_features_return, test_features_return = get_pca_transform(train_features, test_features, features=CELLS,
-                                                                    n_components=cfg.model.n_comp_cells, flag='CELLS')
+    train_features_return, test_features_return = \
+        get_pca_transform(train_features, test_features, features=CELLS, n_components=cfg.model.n_comp_cells,
+                          flag='CELLS', test_append=False)
     train_features = pd.concat((train_features, train_features_return), axis=1)
     test_features = pd.concat((test_features, test_features_return), axis=1)
 
@@ -111,8 +113,7 @@ def run():
     train_features_return, test_features_return = \
         split_with_variancethreshold(train_features, test_features,
                                      variance_threshold_for_fs=cfg.model.variance_threshold_for_fs,
-                                     categorical=['sig_id', 'cp_type', 'cp_time', 'cp_dose'],
-                                     test_append=False)
+                                     categorical=['sig_id', 'cp_type', 'cp_time', 'cp_dose'], test_append=False)
     train_features = train_features_return
     test_features = test_features_return
 
@@ -169,10 +170,6 @@ def run():
 
     num_features = len(feature_cols)
     num_targets = len(target_cols)
-
-    # Averaging on multiple SEEDS
-
-    #     print(f"target.columns: {target.columns}")
 
     ##################################################
     # Train

@@ -90,16 +90,12 @@ def inference_fn(model, dataloader, device, batch_size=128):
 
 # run train one model
 def run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, num_features, num_targets, target,
-                 verbose=False, test_features=None):
+                 verbose=False):
 
     log = logging.getLogger(f"{__name__}.{inspect.currentframe().f_code.co_name}")
     set_seed(seed)
 
-    print(f"test.shape: {test.shape}")
     test_ = preprocess_data(test, hparams.model.patch1)
-    print(f"test_.shape: {test_.shape}")
-    print(f"num_features: {num_features}")
-    return 0
     if hparams.model.train_models:
         train = preprocess_data(folds, hparams.model.patch1)
 
@@ -185,21 +181,6 @@ def run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, nu
         dropout=hparams.model.dropout_model,
     )
 
-    print(f"[s{seed}][f{fold}] loading models: {hparams['path_model']}/S{seed}FOLD{fold}.pth")
-
-    if os.path.exists(f"{hparams['path_model']}/S{seed}FOLD{fold}_.pth"):
-        print(f"model exists `{hparams['path_model']}/S{seed}FOLD{fold}.pth`")
-        res = test_features['sig_id'].to_frame()
-        res[target_cols] = np.zeros((test_features.shape[0], 206))
-        res.to_csv('submission.csv', index=False)
-        print(f"zero res.shape: {res.shape}")
-    else:
-        print(f"model not exists `{hparams['path_model']}/S{seed}FOLD{fold}.pth`")
-        res = test_features['sig_id'].to_frame()
-        res[target_cols] = np.ones((test_features.shape[0], 206))
-        res.to_csv('submission.csv', index=False)
-        print(f"zero res.shape: {res.shape}")
-
     model.load_state_dict(torch.load(f"{hparams['path_model']}/S{seed}FOLD{fold}.pth",
                                      map_location=torch.device(hparams['device'])
                                      ))
@@ -217,7 +198,7 @@ def run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, nu
 
 # def run_k_fold
 def run_k_fold(NFOLDS, seed, hparams, folds, train, test, feature_cols, target_cols, num_features,
-                                       num_targets, target, verbose, test_features):
+                                       num_targets, target, verbose):
 
     log = logging.getLogger(f"{__name__}.{inspect.currentframe().f_code.co_name}")
     oof = np.zeros((len(train), len(target_cols)))
@@ -225,7 +206,7 @@ def run_k_fold(NFOLDS, seed, hparams, folds, train, test, feature_cols, target_c
 
     for fold in tqdm(range(NFOLDS), 'run_k_fold', leave=verbose):
         return_run = run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, num_features,
-                                       num_targets, target, verbose, test_features)
+                                       num_targets, target, verbose)
         if hparams.model.train_models:
             oof_, pred_ = return_run
             oof += oof_

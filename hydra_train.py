@@ -80,18 +80,20 @@ def run(cfg: DictConfig) -> None:
     # PCA
     ##################################################
 
-    train2, test2 = get_pca_transform(train_features, test_features, features=GENES,
-                                      n_components=cfg.model.n_comp_genes, flag='GENES')
-    train_features = pd.concat((train_features, train2), axis=1)
-    test_features = pd.concat((test_features, test2), axis=1)
-    del train2, test2
+    train_features_return, test_features_return = \
+        get_pca_transform(train_features, test_features, features=GENES, n_components=cfg.model.n_comp_genes,
+                          flag='GENES', test_append=False)
+    train_features = pd.concat((train_features, train_features_return), axis=1)
+    test_features = pd.concat((test_features, test_features_return), axis=1)
+    del train_features_return, test_features_return
     gc.collect()
 
-    train2, test2 = get_pca_transform(train_features, test_features, features=CELLS,
-                                      n_components=cfg.model.n_comp_cells, flag='CELLS')
-    train_features = pd.concat((train_features, train2), axis=1)
-    test_features = pd.concat((test_features, test2), axis=1)
-    del train2, test2
+    train_features_return, test_features_return = \
+        get_pca_transform(train_features, test_features, features=CELLS, n_components=cfg.model.n_comp_cells,
+                          flag='CELLS', test_append=False)
+    train_features = pd.concat((train_features, train_features_return), axis=1)
+    test_features = pd.concat((test_features, test_features_return), axis=1)
+    del train_features_return, test_features_return
     gc.collect()
     ##################################################
     # Start: Feature selection
@@ -151,14 +153,6 @@ def run(cfg: DictConfig) -> None:
     ##################################################
     feature_cols = [c for c in preprocess_data(folds, cfg.model.patch1).columns if c not in target_cols]
     feature_cols = [c for c in feature_cols if c not in ['kfold', 'sig_id']]
-    print(f"feature_cols.len(): {len(feature_cols)}")
-    print(f"train.shape: {train.shape}")
-    print(f"test.shape: {test.shape}")
-    if verbose:
-        print(f"Preprocessing")
-    if verbose:
-        print(f"len(feature_cols): {len(feature_cols)}")
-
     num_features = len(feature_cols)
     num_targets = len(target_cols)
 
@@ -175,7 +169,7 @@ def run(cfg: DictConfig) -> None:
 
     for seed in tqdm(SEED, leave=verbose):
         return_run_k_fold = run_k_fold(cfg.model.nfolds, seed, cfg, folds, train, test, feature_cols, target_cols,
-                                       num_features, num_targets, target, verbose, test_features)
+                                       num_features, num_targets, target, verbose)
         if cfg.model.train_models:
             oof_, predictions_ = return_run_k_fold
             oof += oof_ / len(SEED)
