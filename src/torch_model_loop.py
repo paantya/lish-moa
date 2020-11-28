@@ -219,7 +219,10 @@ def run_k_fold_nn(data_dict, hparams, cv, seed=42, file_prefix='m1', verbose=0):
     predictions = np.zeros((len(data_dict['test']), len(data_dict['target_cols'])))
 
     total_loss = 0
-    for fold, (trn_idx, val_idx) in enumerate(tqdm(cv.split(X=train, y=target), 'run folds', leave=False)):
+    for fold, (trn_idx, val_idx) in enumerate(tqdm(cv.split(X=train, y=target),
+                                                   f'run {hparams.model.nfolds} folds',
+                                                   total=hparams.model.nfolds,
+                                                   leave=False)):
         if hparams.model.train_models:
             X_train, y_train, = train[feature_cols].iloc[trn_idx].values, target[target_cols].iloc[trn_idx].values
             X_valid, y_valid = train[feature_cols].iloc[val_idx].values, target[target_cols].iloc[val_idx].values

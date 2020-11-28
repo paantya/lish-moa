@@ -123,8 +123,8 @@ def get_pca_transform(train_features, test_features, features, n_components, fla
     train2 = data2[:train_features.shape[0]]
     test2 = data2[-test_features.shape[0]:]
 
-    train2 = pd.DataFrame(train2, columns=[f'pca_G-{i}' for i in range(n_components)])
-    test2 = pd.DataFrame(test2, columns=[f'pca_G-{i}' for i in range(n_components)])
+    train2 = pd.DataFrame(train2, columns=[f'pca_{flag}-{i}' for i in range(n_components)])
+    test2 = pd.DataFrame(test2, columns=[f'pca_{flag}-{i}' for i in range(n_components)])
 
     log.debug(f"End PCA {flag}.\n"
               f"train2.shape: {train2.shape}\n"

@@ -49,7 +49,7 @@ def run(cfg: DictConfig) -> None:
     ######################################
     # data_load and preprocess
     ######################################
-    data_dict = load_and_preprocess_data(cfg, path, verbose=1)
+    data_dict = load_and_preprocess_data(cfg, path, test_append=False, verbose=1)
 
     ######################################
     # CV

@@ -199,7 +199,15 @@ def get_xgboost_fe(train, targets, test, sub, xgb_params, importance_type='weigh
 
 
 
-def get_xgboost1(train, targets, test, sub, xgb_params, NFOLDS=7, optimization=False, verbosity=0):
+def get_xgboost(data_dict, hparams, cv, seed=42, file_prefix='m1', optimization=False, verbose=0):
+    # xgb_params, NFOLDS=7, optimization=False, verbosity=0):
+
+    train = data_dict['train'].copy()
+    test = data_dict['test'].copy()
+    target = data_dict['target'].copy()
+    feature_cols = data_dict['feature_cols']
+    target_cols = data_dict['target_cols']
+
     train_score = targets
 
 
@@ -216,22 +224,18 @@ def get_xgboost1(train, targets, test, sub, xgb_params, NFOLDS=7, optimization=F
     oof_loss = 0
 
     start_time = datetime.now()
-    for c, column in enumerate(tqdm(cols, 'models_one_cols'), 1):
-        if c > 20:
-            break
+    for c, column in enumerate(tqdm(cols, 'models_one_cols', leave=False)):
         y = train_score[column]
         total_loss = 0
 
-        # CV = KFold(n_splits=NFOLDS, shuffle=True).split(train)
-        CV = MultilabelStratifiedKFold(n_splits=NFOLDS, random_state=42).split(X=train, y=train_score)
+        start_time_loc = datetime.now()0
+        for fold, (trn_idx, val_idx) in enumerate(tqdm(cv.split(X=train, y=target),
+                                                       f'run {hparams.model.nfolds} folds',
+                                                       total=hparams.model.nfolds,
+                                                       leave=False)):
 
-        start_time_loc = datetime.now()
-        for fn, (trn_idx, val_idx) in enumerate(CV):
-            if verbosity > 1:
-                print('\rFold: ', fn + 1, end='')
-            X_train, X_val = train.iloc[trn_idx], train.iloc[val_idx]
-            y_train, y_val = y.iloc[trn_idx], y.iloc[val_idx]
-
+            X_train, y_train, = train[feature_cols].iloc[trn_idx].values, target[target_cols].iloc[trn_idx].values
+            X_valid, y_valid = train[feature_cols].iloc[val_idx].values, target[target_cols].iloc[val_idx].values
 
 
             model = XGBRegressor(
@@ -239,33 +243,38 @@ def get_xgboost1(train, targets, test, sub, xgb_params, NFOLDS=7, optimization=F
             )
 
             model.fit(X_train, y_train, )
-            pred = model.predict(X_val)
+            pred = model.predict(X_valid)
             # pred = [n if n>0 else 0 for n in pred]
 
-            loss = metric(y_val, pred)
+            loss = metric(y_valid, pred)
             total_loss += loss
             predictions = model.predict(test)
             # predictions = [n if n>0 else 0 for n in predictions]
-            submission[column] += predictions / NFOLDS
+            submission[column] += predictions / hparams.model.nfolds
 
         stop_time_loc = datetime.now()
-        submission[column] = submission[column]/NFOLDS
-        oof_loss += total_loss / NFOLDS
-        if verbosity > 1:
+        submission[column] = submission[column]/hparams.model.nfolds
+        oof_loss += total_loss / hparams.model.nfolds
+        if verbose > 1:
             print(f"\r[{stop_time_loc - start_time_loc}] Model " + str(c) + ": Loss =" + str(total_loss / NFOLDS))
 
     stop_time = datetime.now()
 
-    if verbosity:
+    if verbose:
         print(f"[{stop_time - start_time}] oof_loss/len(cols): {oof_loss/len(cols)}")
     # submission.loc[test['cp_type'] == 1, train_score.columns] = 0
+
+    gc.collect()
     if optimization:
         return oof_loss/len(cols)
     else:
-        return oof_loss/len(cols), submission
+        if hparams.model.train_models:
+            return oof, predictions
+        else:
+            return predictions
 
 
-def get_xgboost(train, targets, test, NFOLDS=7):
+def get_xgboost_old(train, targets, test, NFOLDS=7):
     # drop id col
     X = train.iloc[:, 1:].to_numpy()
     X_test = test.iloc[:, 1:].to_numpy()
