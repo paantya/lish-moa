@@ -109,15 +109,17 @@ def quantile_transformer(train_features, test_features, features, n_quantiles=10
     return train_features, test_features
 
 
-def get_pca_transform(train_features, test_features, features, n_components, flag='', random_state=42, test_append=False):
+def get_pca_transform(train_features, test_features, features, n_components, flag='', random_state=42, append_test=False):
     train_features = train_features.copy()
     test_features = test_features.copy()
     log = logging.getLogger(f"{__name__}.{inspect.currentframe().f_code.co_name}")
     log.info(f"Start PCA {flag} :len({flag}): {len(features)}")
     # PCA GENES
-    if test_append:
+    if append_test:
+        print(f"Learn PCA with test")
         data = pd.concat([pd.DataFrame(train_features[features]), pd.DataFrame(test_features[features])])
     else:
+        print(f"Learn PCA with out test")
         data = train_features[features]
     data2 = (PCA(n_components=n_components, random_state=random_state).fit_transform(data[features]))
     train2 = data2[:train_features.shape[0]]
@@ -137,18 +139,20 @@ def get_pca_transform(train_features, test_features, features, n_components, fla
 
 
 def split_with_variancethreshold(train_features, test_features, variance_threshold_for_fs, categorical,
-                                 test_append=False):
+                                 append_test=False):
     log = logging.getLogger(f"{__name__}.{inspect.currentframe().f_code.co_name}")
     log.info(f"Start feature_selection.VarianceThreshold")
     train_features = train_features.copy()
     test_features = test_features.copy()
 
-    if test_append:
+    if append_test:
+        print(f"Learn VarianceThreshold with test")
         data = train_features.append(test_features)
     else:
+        print(f"Learn VarianceThreshold with out test")
         data = train_features
 
-    log.info(f" data.shape (data = {'concat(train_features + test_features)' if test_append else 'train_features'}"
+    log.info(f" data.shape (data = {'concat(train_features + test_features)' if append_test else 'train_features'}"
              f"): {data.shape}")
 
     var_thresh = VarianceThreshold(variance_threshold_for_fs)

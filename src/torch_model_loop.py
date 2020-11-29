@@ -204,7 +204,7 @@ def run_training_fold(hparams, x_train, y_train, x_valid, y_valid, test, num_fea
 
 
 # def run_k_fold_nn
-def run_k_fold_nn(data_dict, hparams, cv, seed=42, file_prefix='m1', verbose=0):
+def run_k_fold_nn(data_dict, hparams, cv, seed=42, file_prefix='m1', pretrain_model=True, verbose=0):
     log = logging.getLogger(f"{__name__}.{inspect.currentframe().f_code.co_name}")
     set_seed(seed)
 
@@ -223,7 +223,7 @@ def run_k_fold_nn(data_dict, hparams, cv, seed=42, file_prefix='m1', verbose=0):
                                                    f'run {hparams.model.nfolds} folds',
                                                    total=hparams.model.nfolds,
                                                    leave=False)):
-        if hparams.model.train_models:
+        if not pretrain_model:
             X_train, y_train, = train[feature_cols].iloc[trn_idx].values, target[target_cols].iloc[trn_idx].values
             X_valid, y_valid = train[feature_cols].iloc[val_idx].values, target[target_cols].iloc[val_idx].values
 
@@ -264,6 +264,9 @@ def run_k_fold_nn(data_dict, hparams, cv, seed=42, file_prefix='m1', verbose=0):
                 valid_loss, valid_preds = valid_fn(model, loss_fn, validloader, hparams['device'])
                 log.debug(f"sd: {seed:>2} fld: {fold:>2}, ep: {epoch:>3}, tr_loss: {train_loss:.6f}, "
                           f"vl_loss: {valid_loss:.6f}, doff_val: {last_valid_loss - valid_loss:>7.1e}")
+                if verbose:
+                    print(f"sd: {seed:>2} fld: {fold:>2}, ep: {epoch:>3}, tr_loss: {train_loss:.6f}, "
+                          f"vl_loss: {valid_loss:.6f}, doff_val: {last_valid_loss - valid_loss:>7.1e}")
                 last_valid_loss = valid_loss
 
                 if np.isnan(valid_loss):
@@ -285,6 +288,8 @@ def run_k_fold_nn(data_dict, hparams, cv, seed=42, file_prefix='m1', verbose=0):
 
             gc.collect()
 
+            if verbose:
+                print('')
             log.debug('')
 
         # --------------------- PREDICTION---------------------
@@ -309,12 +314,12 @@ def run_k_fold_nn(data_dict, hparams, cv, seed=42, file_prefix='m1', verbose=0):
         del model
         gc.collect()
 
-        if hparams.model.train_models:
+        if not pretrain_model:
             oof += oof_
         predictions += pred_ / hparams.model.nfolds
 
     gc.collect()
-    if hparams.model.train_models:
+    if not pretrain_model:
         return oof, predictions
     else:
         return predictions

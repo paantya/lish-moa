@@ -46,13 +46,14 @@ def change_type(data):
 # @hydra.main(config_path="config", config_name="config.yaml", strict=False)
 def run():
     on_kaggle = False  # change me True if you use kaggle
+    pretrain_model = False
     cfg = OmegaConf.load(f"{'../input/src-code0' if on_kaggle else './'}/src/test.yaml")
     # os.chdir(utils.get_original_cwd())
     #     log.info(OmegaConf.to_yaml(cfg))
-    cfg['device'] = 'cpu'
+    cfg['device'] = 'cuda'
     print(cfg['device'])
     cfg['list_seed'] = [i for i in range(cfg.model.nseed)]
-    verbose = 0
+    verbose = 1
     local_path = '../'
     path = f'../input/lish-moa'
     path_model = f"{'/kaggle/input/models0' if on_kaggle else '../models'}"
@@ -61,7 +62,7 @@ def run():
     ######################################
     # data_load and preprocess
     ######################################
-    data_dict = load_and_preprocess_data(cfg, path, test_append=False, verbose=1)
+    data_dict = load_and_preprocess_data(cfg, path, pca_append_test=True, variancethreshold_append_test=True, verbose=1)
 
     ######################################
     # CV
@@ -74,8 +75,8 @@ def run():
     oof = np.zeros((len(data_dict['train']), len(data_dict['target_cols'])))
     predictions = np.zeros((len(data_dict['test']), len(data_dict['target_cols'])))
     for seed in tqdm(cfg['list_seed'], leave=verbose):
-        return_run_k_fold = run_k_fold_nn(data_dict, cfg, cv=CV, seed=seed, file_prefix='m1', verbose=verbose)
-        if cfg.model.train_models:
+        return_run_k_fold = run_k_fold_nn(data_dict, cfg, cv=CV, seed=seed, file_prefix='m1', pretrain_model=pretrain_model, verbose=verbose)
+        if not pretrain_model:
             oof_, predictions_ = return_run_k_fold
             oof += oof_ / cfg.model.nseed
         else:
@@ -93,7 +94,7 @@ def run():
     train_targets_scored = data_dict['train_targets_scored']
     test_features = data_dict['test_features']
 
-    if cfg.model.train_models:
+    if not pretrain_model:
         train[target_cols] = oof
     test[target_cols] = predictions
 
@@ -101,7 +102,7 @@ def run():
     # valodation and save
     ##################################################
 
-    if cfg.model.train_models:
+    if not pretrain_model:
         y_true = train_targets_scored[target_cols].values
         valid_results = train_targets_scored.drop(columns=target_cols).merge(train[['sig_id'] + target_cols],
                                                                          on='sig_id', how='left').fillna(0)
@@ -131,7 +132,7 @@ def run():
 
     res.to_csv('submission.csv', index=False)
 
-    if cfg.model.train_models:
+    if not pretrain_model:
         return score
     else:
         return 0
