@@ -114,7 +114,7 @@ def get_pca_transform(train_features, test_features, features, n_components, fla
     test_features = test_features.copy()
     log = logging.getLogger(f"{__name__}.{inspect.currentframe().f_code.co_name}")
     log.info(f"Start PCA {flag} :len({flag}): {len(features)}")
-    log.info(f"features: {features}.")
+    # log.info(f"features: {features}.")
     # PCA GENES
     if append_test:
         print(f"Learn PCA with test")

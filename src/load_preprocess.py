@@ -30,10 +30,16 @@ from src.data.process_data import set_seed, preprocess_data, change_type, from_y
 
 os.listdir('../input/lish-moa')
 
-def load_and_preprocess_data_index(cfg, path, pca_append_test=False, variancethreshold_append_test=False, verbose=0):
+def load_and_preprocess_data_index(cfg, path, pca_append_test=False, variancethreshold_append_test=False, verbose=0, testX4=False):
     # data_load
     train_features = pd.read_csv(f'{path}/train_features.csv').set_index('sig_id')
     test_features = pd.read_csv(f'{path}/test_features.csv').set_index('sig_id')
+
+    if testX4:
+        print(f"Run X4 test")
+        log.info(f"Run X4 test")
+        test_features = pd.concat([test_features, test_features, test_features, test_features], axis=0)
+        test_features.index = range(test_features.shape[0])
     train_targets_scored = pd.read_csv(f'{path}/train_targets_scored.csv').set_index('sig_id')
     train_targets_nonscored = pd.read_csv(f'{path}/train_targets_nonscored.csv').set_index('sig_id')
     train_drug = pd.read_csv(f'{path}/train_drug.csv').set_index('sig_id')

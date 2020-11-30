@@ -10,8 +10,10 @@ import torch.optim as optim
 from tqdm.auto import tqdm
 
 from src.loss.loss import SmoothBCEwLogits
-from src.models.base import Model
+from src.models.base import Model, NetTwoHead
 from src.datasets.base import MoADataset, TestDataset
+from src.datasets.dual import MoADatasetDual
+from src.datamodule.dual import MoADataModuleDual
 from src.data.process_data import preprocess_data, set_seed
 import gc
 
@@ -203,6 +205,135 @@ def run_training_fold(hparams, x_train, y_train, x_valid, y_valid, test, num_fea
 
 
 
+# def run_k_fold_nn_two_head
+def run_k_fold_nn_two_head(data_dict, hparams, cv, seed=42, file_prefix='m1', pretrain_model=True, verbose=0):
+    log = logging.getLogger(f"{__name__}.{inspect.currentframe().f_code.co_name}")
+    set_seed(seed)
+
+    train_features = data_dict['train_features'].copy()
+    train_targets_scored = data_dict['train_targets_scored'].copy()
+    train = data_dict['train'].copy()
+    test = data_dict['test'].copy()
+    target = data_dict['target'].copy()
+    feature_cols = data_dict['feature_cols']
+    target_cols = data_dict['target_cols']
+
+
+    oof = np.zeros((len(data_dict['train']), len(data_dict['target_cols'])))
+    predictions = np.zeros((len(data_dict['test']), len(data_dict['target_cols'])))
+
+    total_loss = 0
+    # for fold, (trn_idx, val_idx) in enumerate(tqdm(cv.split(X=train, y=target),
+    #                                                f'run {hparams.model.nfolds} folds',
+    #                                                total=hparams.model.nfolds,
+    #                                                leave=False)):
+    # for fold, (_, val) in enumerate(cv.split(X=train_features, y=train_targets_scored)):
+    for fold, (trn_idx, val_idx) in enumerate(tqdm(cv.split(X=train[feature_cols+['drug_id']], y=train[target_cols]),
+                                                   f'run {hparams.model.nfolds} folds',
+                                                   total=hparams.model.nfolds,
+                                                   leave=False)):
+        if not pretrain_model:
+            X_train, y_train, = train[feature_cols].iloc[trn_idx].values, target[target_cols].iloc[trn_idx].values
+            X_valid, y_valid = train[feature_cols].iloc[val_idx].values, target[target_cols].iloc[val_idx].values
+
+            train_dataset = MoADataset(X_train, y_train)
+            valid_dataset = MoADataset(X_valid, y_valid)
+            trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=hparams.datamodule.batch_size,
+                                                      num_workers=hparams.datamodule.num_workers, shuffle=True)
+            validloader = torch.utils.data.DataLoader(valid_dataset, batch_size=hparams.datamodule.batch_size,
+                                                      num_workers=hparams.datamodule.num_workers, shuffle=False)
+            model = Model(
+                num_features=len(feature_cols),
+                num_targets=len(target_cols),
+                hidden_size=hparams.model.hidden_size,
+                dropout=hparams.model.dropout_model,
+            )
+
+            model.to(hparams['device'])
+
+            optimizer = torch.optim.Adam(model.parameters(), lr=hparams.model.lr,
+                                         weight_decay=hparams.model.weight_decay)
+            scheduler = optim.lr_scheduler.OneCycleLR(optimizer=optimizer, pct_start=0.1, div_factor=1e3,
+                                                      max_lr=1e-2, epochs=hparams.model.epochs,
+                                                      steps_per_epoch=len(trainloader))
+
+            loss_fn = nn.BCEWithLogitsLoss()
+            loss_tr = SmoothBCEwLogits(smoothing=0.001)
+
+            early_stopping_steps = hparams.model.early_stopping_steps
+            early_step = 0
+
+            oof_ = np.zeros((len(train), len(target_cols)))
+            best_loss = np.inf
+
+            last_valid_loss = 0.0
+            for epoch in range(hparams.model.epochs):
+
+                train_loss = train_fn(model, optimizer, scheduler, loss_tr, trainloader, hparams['device'])
+                valid_loss, valid_preds = valid_fn(model, loss_fn, validloader, hparams['device'])
+                log.debug(f"sd: {seed:>2} fld: {fold:>2}, ep: {epoch:>3}, tr_loss: {train_loss:.6f}, "
+                          f"vl_loss: {valid_loss:.6f}, doff_val: {last_valid_loss - valid_loss:>7.1e}")
+                if verbose:
+                    print(f"sd: {seed:>2} fld: {fold:>2}, ep: {epoch:>3}, tr_loss: {train_loss:.6f}, "
+                          f"vl_loss: {valid_loss:.6f}, doff_val: {last_valid_loss - valid_loss:>7.1e}")
+                last_valid_loss = valid_loss
+
+                if np.isnan(valid_loss):
+                    log.info(f"valid_loss is nan")
+                if valid_loss < best_loss:
+
+                    if np.isnan(valid_loss):
+                        log.info(f"valid_loss is nan in save models.")
+
+                    best_loss = valid_loss
+                    oof_[val_idx] = valid_preds
+                    torch.save(model.state_dict(), f"{hparams.path_model}/{file_prefix}S{seed}FOLD{fold}.pth")
+
+                elif (hparams.model.early_stop == True):
+
+                    early_step += 1
+                    if (early_step >= early_stopping_steps):
+                        break
+
+            gc.collect()
+
+            if verbose:
+                print('')
+            log.debug('')
+
+        # --------------------- PREDICTION---------------------
+        testdataset = TestDataset(test[feature_cols].values)
+        testloader = torch.utils.data.DataLoader(testdataset, batch_size=hparams.datamodule.batch_size,
+                                                 num_workers=hparams.datamodule.num_workers, shuffle=False)
+
+        model = Model(
+            num_features=len(feature_cols),
+            num_targets=len(target_cols),
+            hidden_size=hparams.model.hidden_size,
+            dropout=hparams.model.dropout_model,
+        )
+
+        model.load_state_dict(torch.load(f"{hparams['path_model']}/{file_prefix}S{seed}FOLD{fold}.pth",
+                                         map_location=torch.device(hparams['device'])
+                                         ))
+
+        model.to(hparams['device'])
+
+        pred_ = inference_fn(model, testloader, hparams['device'])
+        del model
+        gc.collect()
+
+        if not pretrain_model:
+            oof += oof_
+        predictions += pred_ / hparams.model.nfolds
+
+    gc.collect()
+    if not pretrain_model:
+        return oof, predictions
+    else:
+        return predictions
+
+
 # def run_k_fold_nn
 def run_k_fold_nn(data_dict, hparams, cv, seed=42, file_prefix='m1', pretrain_model=True, verbose=0):
     log = logging.getLogger(f"{__name__}.{inspect.currentframe().f_code.co_name}")
@@ -221,7 +352,6 @@ def run_k_fold_nn(data_dict, hparams, cv, seed=42, file_prefix='m1', pretrain_mo
     predictions = np.zeros((len(data_dict['test']), len(data_dict['target_cols'])))
 
     total_loss = 0
-    print("start cv")
     # for fold, (trn_idx, val_idx) in enumerate(tqdm(cv.split(X=train, y=target),
     #                                                f'run {hparams.model.nfolds} folds',
     #                                                total=hparams.model.nfolds,

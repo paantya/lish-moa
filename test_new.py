@@ -56,7 +56,7 @@ def run():
     verbose = 1
     local_path = '../'
     path = f'../input/lish-moa'
-    path_model = f"{'/kaggle/input/models0' if on_kaggle else '../models'}"
+    path_model = f"{'/kaggle/input/models0' if pretrain_model else '/kaggle/working' if on_kaggle else '../models'}"
     cfg['path_model'] = path_model
 
     ######################################

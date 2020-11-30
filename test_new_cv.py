@@ -1,7 +1,7 @@
+# %% [code]
 import os
 import gc
 import sys
-import hydra
 import torch
 import logging
 import warnings
@@ -26,33 +26,47 @@ from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 sys.path.append('../input/src-code0')
 sys.path.append('../input/models0')
 
-from src.load_preprocess import load_and_preprocess_data_index
+from src.load_preprocess import load_and_preprocess_data, load_and_preprocess_data_index
 from src.cv.multilabel import DrugAwareMultilabelStratifiedKFold
 from src.torch_model_loop import run_k_fold, run_k_fold_nn
-from src.data.process_data import set_seed, preprocess_data, change_type, from_yml, \
+from src.data.process_data import set_seed, preprocess_data, from_yml, \
     quantile_transformer, get_pca_transform, split_with_variancethreshold
 
 os.listdir('../input/lish-moa')
 
-@hydra.main(config_path="config", config_name="config.yaml", strict=False)
-def run(cfg: DictConfig) -> None:
-    os.chdir(hydra.utils.get_original_cwd())
-    log.info(OmegaConf.to_yaml(cfg))
-    cfg['device'] = ('cuda' if torch.cuda.is_available() else 'cpu')
+
+def change_type(data):
+    for k, v in data.dtypes.items():
+        if v == 'float64':
+            data[k] = data[k].astype('float32')
+        if v == 'int64':
+            data[k] = data[k].astype('int8')
+    return data
+
+
+# @hydra.main(config_path="config", config_name="config.yaml", strict=False)
+def run():
+    on_kaggle = False  # change me True if you use kaggle
+    pretrain_model = False
+    cfg = OmegaConf.load(f"{'../input/src-code0' if on_kaggle else './'}/src/test.yaml")
+    # os.chdir(utils.get_original_cwd())
+    #     log.info(OmegaConf.to_yaml(cfg))
+    cfg['device'] = 'cuda'
+    print(cfg['device'])
     cfg['list_seed'] = [i for i in range(cfg.model.nseed)]
     verbose = 1
     local_path = '../'
-    path = f'{local_path}input/lish-moa'
-    path_model = f'{local_path}models'
+    path = f'../input/lish-moa'
+    path_model = f"{'/kaggle/input/models0' if pretrain_model else '/kaggle/working' if on_kaggle else '../models'}"
     cfg['path_model'] = path_model
-    # print(os.listdir(f'{local_path}../'))
 
     ######################################
     # data_load and preprocess
     ######################################
 
     pretrain_model = False
-    data_dict = load_and_preprocess_data_index(cfg, path, pca_append_test=True, variancethreshold_append_test=False, verbose=1)
+    data_dict = load_and_preprocess_data_index(cfg, path, pca_append_test=True, variancethreshold_append_test=False,
+                                               verbose=1)
 
     ######################################
     # cv
@@ -66,7 +80,8 @@ def run(cfg: DictConfig) -> None:
     oof = np.zeros((len(data_dict['train']), len(data_dict['target_cols'])))
     predictions = np.zeros((len(data_dict['test']), len(data_dict['target_cols'])))
     for seed in tqdm(cfg['list_seed'], leave=verbose):
-        return_run_k_fold = run_k_fold_nn(data_dict, cfg, cv=CV, seed=seed, file_prefix='m1', pretrain_model=pretrain_model, verbose=verbose)
+        return_run_k_fold = run_k_fold_nn(data_dict, cfg, cv=CV, seed=seed, file_prefix='m1',
+                                          pretrain_model=pretrain_model, verbose=verbose)
         if not pretrain_model:
             oof_, predictions_ = return_run_k_fold
             oof += oof_ / cfg.model.nseed
@@ -74,8 +89,6 @@ def run(cfg: DictConfig) -> None:
             predictions_ = return_run_k_fold
         predictions += predictions_ / cfg.model.nseed
         gc.collect()
-
-
 
     train = data_dict['train'].copy()
     test = data_dict['test'].copy()
@@ -96,7 +109,7 @@ def run(cfg: DictConfig) -> None:
     if not pretrain_model:
         y_true = train_targets_scored[target_cols].values
         valid_results = train_targets_scored.drop(columns=target_cols).merge(train[target_cols],
-                                                                         on='sig_id', how='left').fillna(0)
+                                                                             on='sig_id', how='left').fillna(0)
         y_pred = valid_results[target_cols].values
 
         score = 0
@@ -129,7 +142,6 @@ def run(cfg: DictConfig) -> None:
         return score
     else:
         return 0
-
 
 if __name__ == '__main__':
     run()

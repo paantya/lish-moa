@@ -13,7 +13,7 @@ from sklearn.metrics import log_loss
 import matplotlib.pyplot as plt
 
 from sklearn.multioutput import MultiOutputClassifier
-
+import gc
 import sys
 sys.path.append('../../../input/iterativestratification')
 from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
@@ -199,74 +199,76 @@ def get_xgboost_fe(train, targets, test, sub, xgb_params, importance_type='weigh
 
 
 
-def get_xgboost(data_dict, hparams, cv, seed=42, file_prefix='m1', optimization=False, verbose=0):
+def get_xgboost(data_dict, hparams, xgb_params, cv, seed=42, file_prefix='m1', optimization=False, verbose=0):
     # xgb_params, NFOLDS=7, optimization=False, verbosity=0):
 
+    train_features = data_dict['train_features'].copy()
+    train_targets_scored = data_dict['train_targets_scored'].copy()
     train = data_dict['train'].copy()
     test = data_dict['test'].copy()
     target = data_dict['target'].copy()
     feature_cols = data_dict['feature_cols']
     target_cols = data_dict['target_cols']
 
-    train_score = targets
 
+    oof = np.zeros((len(data_dict['train']), len(data_dict['target_cols'])))
+    predictions = np.zeros((len(data_dict['test']), len(data_dict['target_cols'])))
 
-    train = train.iloc[:, 1:]
-    test = test.iloc[:, 1:]
-    train_score = targets.iloc[:, 1:]
-
-    sample = sub
-
-    cols = train_score.columns
-    submission = sample.copy()
-    submission.loc[:, train_score.columns] = 0
+    train_score = target[target_cols]
+    cols = target_cols
+    submission = np.zeros((len(data_dict['test']), len(data_dict['target_cols'])))
     # test_preds = np.zeros((test.shape[0], train_score.shape[1]))
     oof_loss = 0
 
     start_time = datetime.now()
-    for c, column in enumerate(tqdm(cols, 'models_one_cols', leave=False)):
+    for c, column in enumerate(tqdm(target_cols, 'models_one_cols', leave=False)):
         y = train_score[column]
         total_loss = 0
 
-        start_time_loc = datetime.now()0
-        for fold, (trn_idx, val_idx) in enumerate(tqdm(cv.split(X=train, y=target),
+        start_time_loc = datetime.now()
+        oof_ = np.zeros(len(train))
+        for fold, (trn_idx, val_idx) in enumerate(tqdm(cv.split(X=train[feature_cols+['drug_id']], y=train[target_cols]),
                                                        f'run {hparams.model.nfolds} folds',
                                                        total=hparams.model.nfolds,
                                                        leave=False)):
 
-            X_train, y_train, = train[feature_cols].iloc[trn_idx].values, target[target_cols].iloc[trn_idx].values
-            X_valid, y_valid = train[feature_cols].iloc[val_idx].values, target[target_cols].iloc[val_idx].values
+            X_train, y_train, = train[feature_cols].iloc[trn_idx].values, y.iloc[trn_idx].values
+            X_valid, y_valid = train[feature_cols].iloc[val_idx].values, y.iloc[val_idx].values
 
 
             model = XGBRegressor(
                 **xgb_params
             )
 
-            model.fit(X_train, y_train, )
+            model.fit(X_train, y_train)
             pred = model.predict(X_valid)
+
+            oof_[val_idx] = pred
             # pred = [n if n>0 else 0 for n in pred]
 
             loss = metric(y_valid, pred)
             total_loss += loss
-            predictions = model.predict(test)
+            predictions = model.predict(test[feature_cols].values)
             # predictions = [n if n>0 else 0 for n in predictions]
-            submission[column] += predictions / hparams.model.nfolds
+            submission[:, c] += predictions / hparams.model.nfolds
+
+        # if not pretrain_model:
+        oof[:, c] += oof_
 
         stop_time_loc = datetime.now()
-        submission[column] = submission[column]/hparams.model.nfolds
         oof_loss += total_loss / hparams.model.nfolds
         if verbose > 1:
-            print(f"\r[{stop_time_loc - start_time_loc}] Model " + str(c) + ": Loss =" + str(total_loss / NFOLDS))
-
+            print(f"\r[{stop_time_loc - start_time_loc}] Model " + str(c) + ": Loss =" + str(total_loss / hparams.model.nfolds))
+    predictions = submission
     stop_time = datetime.now()
 
     if verbose:
-        print(f"[{stop_time - start_time}] oof_loss/len(cols): {oof_loss/len(cols)}")
+        print(f"[{stop_time - start_time}] oof_loss/len(target_cols): {oof_loss/len(target_cols)}")
     # submission.loc[test['cp_type'] == 1, train_score.columns] = 0
 
     gc.collect()
     if optimization:
-        return oof_loss/len(cols)
+        return oof_loss/len(target_cols)
     else:
         if hparams.model.train_models:
             return oof, predictions
