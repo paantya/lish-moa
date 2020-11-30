@@ -26,7 +26,8 @@ from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 sys.path.append('../input/src-code0')
 sys.path.append('../input/models0')
 
-from src.load_preprocess import load_and_preprocess_data
+from src.load_preprocess import load_and_preprocess_data_index
+from src.cv.multilabel import DrugAwareMultilabelStratifiedKFold
 from src.torch_model_loop import run_k_fold, run_k_fold_nn
 from src.data.process_data import set_seed, preprocess_data, change_type, from_yml, \
     quantile_transformer, get_pca_transform, split_with_variancethreshold
@@ -51,13 +52,14 @@ def run(cfg: DictConfig) -> None:
     ######################################
 
     pretrain_model = False
-    data_dict = load_and_preprocess_data(cfg, path, pca_append_test=False, variancethreshold_append_test=False, verbose=1)
+    data_dict = load_and_preprocess_data_index(cfg, path, pca_append_test=False, variancethreshold_append_test=False, verbose=1)
 
     ######################################
     # cv
     ######################################
-    CV = MultilabelStratifiedKFold(n_splits=cfg.model.nfolds, random_state=42)
-
+    # CV = MultilabelStratifiedKFold(n_splits=cfg.model.nfolds, random_state=42)
+    # CV = MultilabelStratifiedKFold(n_splits=cfg.model.nfolds, random_state=42)
+    CV = DrugAwareMultilabelStratifiedKFold(n_splits=cfg.model.nfolds, shuffle=False, random_state=42)
     ##################################################
     # Train
     ##################################################

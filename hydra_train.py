@@ -132,7 +132,7 @@ def run(cfg: DictConfig) -> None:
               )
 
     ##################################################
-    # CV folds
+    # cv folds
     ##################################################
     folds = train.copy()
     mskf = MultilabelStratifiedKFold(n_splits=cfg.model.nfolds, random_state=cfg['list_seed'][0])
@@ -169,7 +169,7 @@ def run(cfg: DictConfig) -> None:
         'feature_cols': feature_cols,
         'target_cols': target_cols
     }
-    # base_model_def(data_dict, params, cv=CV, optimization=False, verbose=0):
+    # base_model_def(data_dict, params, cv=cv, optimization=False, verbose=0):
 
     ##################################################
     # Train

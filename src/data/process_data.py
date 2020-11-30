@@ -114,6 +114,7 @@ def get_pca_transform(train_features, test_features, features, n_components, fla
     test_features = test_features.copy()
     log = logging.getLogger(f"{__name__}.{inspect.currentframe().f_code.co_name}")
     log.info(f"Start PCA {flag} :len({flag}): {len(features)}")
+    log.info(f"features: {features}.")
     # PCA GENES
     if append_test:
         print(f"Learn PCA with test")
@@ -121,12 +122,13 @@ def get_pca_transform(train_features, test_features, features, n_components, fla
     else:
         print(f"Learn PCA with out test")
         data = train_features[features]
-    data2 = (PCA(n_components=n_components, random_state=random_state).fit_transform(data[features]))
-    train2 = data2[:train_features.shape[0]]
-    test2 = data2[-test_features.shape[0]:]
+    pca = PCA(n_components=n_components, random_state=random_state)
+    pca.fit(data[features])
+    train2 = pca.transform(train_features[features])
+    test2 = pca.transform(test_features[features])
 
-    train2 = pd.DataFrame(train2, columns=[f'pca_{flag}-{i}' for i in range(n_components)])
-    test2 = pd.DataFrame(test2, columns=[f'pca_{flag}-{i}' for i in range(n_components)])
+    train2 = pd.DataFrame(train2, columns=[f'pca_{flag}-{i}' for i in range(n_components)], index=train_features.index)
+    test2 = pd.DataFrame(test2, columns=[f'pca_{flag}-{i}' for i in range(n_components)], index=test_features.index)
 
     log.debug(f"End PCA {flag}.\n"
               f"train2.shape: {train2.shape}\n"
@@ -160,11 +162,11 @@ def split_with_variancethreshold(train_features, test_features, variance_thresho
     train_features_transformed = var_thresh.transform(train_features.iloc[:, 4:])
     test_features_transformed = var_thresh.transform(test_features.iloc[:, 4:])
 
-    train_features = pd.DataFrame(train_features[categorical].values.reshape(-1, len(categorical)), columns=categorical)
-    train_features = pd.concat([train_features, pd.DataFrame(train_features_transformed)], axis=1)
+    train_features = pd.DataFrame(train_features[categorical].values.reshape(-1, len(categorical)), columns=categorical, index=train_features.index)
+    train_features = pd.concat([train_features, pd.DataFrame(train_features_transformed, index=train_features.index)], axis=1)
 
-    test_features = pd.DataFrame(test_features[categorical].values.reshape(-1, len(categorical)), columns=categorical)
-    test_features = pd.concat([test_features, pd.DataFrame(test_features_transformed)], axis=1)
+    test_features = pd.DataFrame(test_features[categorical].values.reshape(-1, len(categorical)), columns=categorical, index=test_features.index)
+    test_features = pd.concat([test_features, pd.DataFrame(test_features_transformed, index=test_features.index)], axis=1)
 
     log.debug(f"End feature_selection.VarianceThreshold.\n"
               f"train_features.shape: {train_features.shape}\n"

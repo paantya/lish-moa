@@ -63,7 +63,7 @@ def run():
     data_dict = load_and_preprocess_data(cfg, path, test_append=False, verbose=1)
 
     ######################################
-    # CV
+    # cv
     ######################################
     CV = MultilabelStratifiedKFold(n_splits=cfg.model.nfolds, random_state=42)
 

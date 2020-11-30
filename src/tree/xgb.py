@@ -47,7 +47,7 @@ def get_xgboost_cv(train, targets, test, sub, NFOLDS=7):
         y = train_score[column]
         total_loss = 0
 
-        # CV = KFold(n_splits=NFOLDS, shuffle=True).split(train)
+        # cv = KFold(n_splits=NFOLDS, shuffle=True).split(train)
         CV = MultilabelStratifiedKFold(n_splits=NFOLDS, random_state=42).split(X=train, y=train_score)
 
         # print(f"train.shape: {train.shape}")
@@ -58,7 +58,7 @@ def get_xgboost_cv(train, targets, test, sub, NFOLDS=7):
         # model = xgb.cv(
         #     params=params,
         #     dtrain=trainDM,
-        #     folds=CV,
+        #     folds=cv,
         #     # num_boost_round=500,
         #     early_stopping_rounds=10,
         # )
@@ -149,7 +149,7 @@ def get_xgboost_fe(train, targets, test, sub, xgb_params, importance_type='weigh
         y = train_score[column]
         total_loss = 0
 
-        # CV = KFold(n_splits=NFOLDS, shuffle=True).split(train)
+        # cv = KFold(n_splits=NFOLDS, shuffle=True).split(train)
         CV = MultilabelStratifiedKFold(n_splits=NFOLDS, random_state=42).split(X=train, y=targets)
 
         start_time_loc = datetime.now()

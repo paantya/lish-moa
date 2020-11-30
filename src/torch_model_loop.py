@@ -208,6 +208,8 @@ def run_k_fold_nn(data_dict, hparams, cv, seed=42, file_prefix='m1', pretrain_mo
     log = logging.getLogger(f"{__name__}.{inspect.currentframe().f_code.co_name}")
     set_seed(seed)
 
+    train_features = data_dict['train_features'].copy()
+    train_targets_scored = data_dict['train_targets_scored'].copy()
     train = data_dict['train'].copy()
     test = data_dict['test'].copy()
     target = data_dict['target'].copy()
@@ -219,7 +221,13 @@ def run_k_fold_nn(data_dict, hparams, cv, seed=42, file_prefix='m1', pretrain_mo
     predictions = np.zeros((len(data_dict['test']), len(data_dict['target_cols'])))
 
     total_loss = 0
-    for fold, (trn_idx, val_idx) in enumerate(tqdm(cv.split(X=train, y=target),
+    print("start cv")
+    # for fold, (trn_idx, val_idx) in enumerate(tqdm(cv.split(X=train, y=target),
+    #                                                f'run {hparams.model.nfolds} folds',
+    #                                                total=hparams.model.nfolds,
+    #                                                leave=False)):
+    # for fold, (_, val) in enumerate(cv.split(X=train_features, y=train_targets_scored)):
+    for fold, (trn_idx, val_idx) in enumerate(tqdm(cv.split(X=train[feature_cols+['drug_id']], y=train[target_cols]),
                                                    f'run {hparams.model.nfolds} folds',
                                                    total=hparams.model.nfolds,
                                                    leave=False)):
@@ -254,7 +262,7 @@ def run_k_fold_nn(data_dict, hparams, cv, seed=42, file_prefix='m1', pretrain_mo
             early_stopping_steps = hparams.model.early_stopping_steps
             early_step = 0
 
-            oof_ = np.zeros((len(train), target.iloc[:, 1:].shape[1]))
+            oof_ = np.zeros((len(train), len(target_cols)))
             best_loss = np.inf
 
             last_valid_loss = 0.0
