@@ -28,7 +28,7 @@ sys.path.append('../input/models0')
 
 from src.load_preprocess import load_and_preprocess_data_index
 from src.cv.multilabel import DrugAwareMultilabelStratifiedKFold
-from src.torch_model_loop import run_k_fold, run_k_fold_nn
+from src.torch_model_loop import run_k_fold, run_k_fold_nn, run_k_fold_nn_two_head
 from src.data.process_data import set_seed, preprocess_data, change_type, from_yml, \
     quantile_transformer, get_pca_transform, split_with_variancethreshold
 
@@ -66,13 +66,23 @@ def run(cfg: DictConfig) -> None:
     oof = np.zeros((len(data_dict['train']), len(data_dict['target_cols'])))
     predictions = np.zeros((len(data_dict['test']), len(data_dict['target_cols'])))
     for seed in tqdm(cfg['list_seed'], leave=verbose):
-        return_run_k_fold = run_k_fold_nn(data_dict, cfg, cv=CV, seed=seed, file_prefix='m1', pretrain_model=pretrain_model, verbose=verbose)
+        return_run_k_fold = run_k_fold_nn(data_dict, cfg, cv=CV, seed=seed, file_prefix='h1', pretrain_model=pretrain_model, verbose=verbose)
         if not pretrain_model:
             oof_, predictions_ = return_run_k_fold
             oof += oof_ / cfg.model.nseed
         else:
             predictions_ = return_run_k_fold
-        predictions += predictions_ / cfg.model.nseed
+        predictions += predictions_ / cfg.model.nseed / 2
+        gc.collect()
+
+
+        return_run_k_fold = run_k_fold_nn_two_head(data_dict, cfg, cv=CV, seed=seed, file_prefix='m1', pretrain_model=pretrain_model, verbose=verbose)
+        if not pretrain_model:
+            oof_, predictions_ = return_run_k_fold
+            oof += oof_ / cfg.model.nseed
+        else:
+            predictions_ = return_run_k_fold
+        predictions += predictions_ / cfg.model.nseed / 2
         gc.collect()
 
 

@@ -2,15 +2,7 @@
 <project version="4">
   <component name="PublishConfigData" remoteFilesAllowedToDisappearOnAutoupload="false">
     <serverData>
-      <paths name="apatshin@hubble:22 key">
-        <serverdata>
-          <mappings>
-            <mapping deploy="/home/apatshin/kaggle/lish-moa" local="$PROJECT_DIR$" web="/" />
-            <mapping deploy="/home/apatshin/kaggle/input" local="$PROJECT_DIR$/../input" />
-          </mappings>
-        </serverdata>
-      </paths>
-      <paths name="apatshin@tesla:22 key (1)">
+      <paths name="gpu @tesla">
         <serverdata>
           <mappings>
             <mapping deploy="/home/apatshin/kaggle/lish-moa" local="$PROJECT_DIR$" web="/" />

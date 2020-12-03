@@ -13,9 +13,32 @@ from src.loss.loss import SmoothBCEwLogits
 from src.models.base import Model, NetTwoHead
 from src.datasets.base import MoADataset, TestDataset
 from src.datasets.dual import MoADatasetDual
-from src.datamodule.dual import MoADataModuleDual
 from src.data.process_data import preprocess_data, set_seed
 import gc
+
+
+
+
+# train loop
+def train_fn_dual(model, optimizer, scheduler, loss_fn, dataloader, device):
+    model.train()
+    final_loss = 0
+
+    for data in dataloader:
+        optimizer.zero_grad()
+        inputs, targets, targets1 = data['data'].to(device), data['target'].to(device), data['target1'].to(device)
+        outputs, loss, rloss = model(inputs, targets, targets1)
+        # loss = loss_fn(outputs, targets)
+        loss.backward()
+        optimizer.step()
+        scheduler.step()
+
+        final_loss += rloss.item()
+
+    final_loss /= len(dataloader)
+
+    gc.collect()
+    return final_loss
 
 # train loop
 def train_fn(model, optimizer, scheduler, loss_fn, dataloader, device):
@@ -38,6 +61,25 @@ def train_fn(model, optimizer, scheduler, loss_fn, dataloader, device):
     gc.collect()
     return final_loss
 
+
+def valid_fn_dual(model, loss_fn, dataloader, device):
+    model.eval()
+    final_loss = 0
+    valid_preds = []
+
+    for data in dataloader:
+        inputs, targets, targets1 = data['data'].to(device), data['target'].to(device), data['target1'].to(device)
+        outputs, loss, rloss = model(inputs, targets, targets1)
+        # loss = loss_fn(outputs, targets)
+
+        final_loss += rloss.item()
+        valid_preds.append(outputs.detach().cpu().numpy())
+
+    final_loss /= len(dataloader)
+    valid_preds = np.concatenate(valid_preds)
+
+    gc.collect()
+    return final_loss, valid_preds
 
 def valid_fn(model, loss_fn, dataloader, device):
     model.eval()
@@ -71,6 +113,21 @@ def inference_fn_original(model, dataloader, device):
         preds.append(outputs.sigmoid().detach().cpu().numpy())
 
     preds = np.concatenate(preds)
+
+    gc.collect()
+    return preds
+
+
+def inference_fn_dual(model, dataloader, device, batch_size=128):
+    model.eval()
+    preds = np.zeros((len(dataloader)*batch_size, 206))
+
+    for ind, batch in enumerate(dataloader):
+        with torch.no_grad():
+            pred = model(batch['data'].to(device),batch['target'].to(device),batch['target1'].to(device))[0].detach().cpu().numpy()
+        preds[ind * batch_size: ind * batch_size + pred.shape[0]] = pred
+        if pred.shape[0] != batch_size:
+            preds = preds[:-(batch_size-pred.shape[0])]
 
     gc.collect()
     return preds
@@ -143,8 +200,8 @@ def run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, nu
         last_valid_loss = 0.0
         for epoch in range(hparams.model.epochs):
 
-            train_loss = train_fn(model, optimizer, scheduler, loss_tr, trainloader, hparams['device'])
-            valid_loss, valid_preds = valid_fn(model, loss_fn, validloader, hparams['device'])
+            train_loss = train_fn_dual(model, optimizer, scheduler, loss_tr, trainloader, hparams['device'])
+            valid_loss, valid_preds = valid_fn_dual(model, loss_fn, validloader, hparams['device'])
             log.debug(f"sd: {seed:>2} fld: {fold:>2}, ep: {epoch:>3}, tr_loss: {train_loss:.6f}, "
                       f"vl_loss: {valid_loss:.6f}, doff_val: {last_valid_loss - valid_loss:>7.1e}")
             last_valid_loss = valid_loss
@@ -212,6 +269,7 @@ def run_k_fold_nn_two_head(data_dict, hparams, cv, seed=42, file_prefix='m1', pr
 
     train_features = data_dict['train_features'].copy()
     train_targets_scored = data_dict['train_targets_scored'].copy()
+    train_targets_nonscored = data_dict['train_targets_nonscored'].copy()
     train = data_dict['train'].copy()
     test = data_dict['test'].copy()
     target = data_dict['target'].copy()
@@ -233,28 +291,32 @@ def run_k_fold_nn_two_head(data_dict, hparams, cv, seed=42, file_prefix='m1', pr
                                                    total=hparams.model.nfolds,
                                                    leave=False)):
         if not pretrain_model:
-            X_train, y_train, = train[feature_cols].iloc[trn_idx].values, target[target_cols].iloc[trn_idx].values
+            X_train, y_train = train[feature_cols].iloc[trn_idx].values, target[target_cols].iloc[trn_idx].values
             X_valid, y_valid = train[feature_cols].iloc[val_idx].values, target[target_cols].iloc[val_idx].values
+            y1_train = train_targets_nonscored[train_targets_nonscored.columns].iloc[trn_idx].values
+            y1_valid = train_targets_nonscored[train_targets_nonscored.columns].iloc[val_idx].values
 
-            train_dataset = MoADataset(X_train, y_train)
-            valid_dataset = MoADataset(X_valid, y_valid)
+            train_dataset = MoADatasetDual(X_train, y_train, y1_train)
+            valid_dataset = MoADatasetDual(X_valid, y_valid, y1_valid)
             trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=hparams.datamodule.batch_size,
                                                       num_workers=hparams.datamodule.num_workers, shuffle=True)
             validloader = torch.utils.data.DataLoader(valid_dataset, batch_size=hparams.datamodule.batch_size,
                                                       num_workers=hparams.datamodule.num_workers, shuffle=False)
-            model = Model(
-                num_features=len(feature_cols),
-                num_targets=len(target_cols),
-                hidden_size=hparams.model.hidden_size,
-                dropout=hparams.model.dropout_model,
+            model = NetTwoHead(
+                n_in=len(feature_cols),
+                n_h=hparams.model.hidden_size,
+                n_out=len(target_cols),
+                n_out1=train_targets_nonscored.shape[1],
+                loss=nn.BCEWithLogitsLoss(),
+                rloss=SmoothBCEwLogits(smoothing=0.001)
             )
 
             model.to(hparams['device'])
 
-            optimizer = torch.optim.Adam(model.parameters(), lr=hparams.model.lr,
+            optimizer = torch.optim.Adam(model.parameters(), lr=hparams.model.lr*2,
                                          weight_decay=hparams.model.weight_decay)
             scheduler = optim.lr_scheduler.OneCycleLR(optimizer=optimizer, pct_start=0.1, div_factor=1e3,
-                                                      max_lr=1e-2, epochs=hparams.model.epochs,
+                                                      max_lr=1.5e-2, epochs=int(hparams.model.epochs),
                                                       steps_per_epoch=len(trainloader))
 
             loss_fn = nn.BCEWithLogitsLoss()
@@ -267,10 +329,10 @@ def run_k_fold_nn_two_head(data_dict, hparams, cv, seed=42, file_prefix='m1', pr
             best_loss = np.inf
 
             last_valid_loss = 0.0
-            for epoch in range(hparams.model.epochs):
+            for epoch in range(int(hparams.model.epochs)):
 
-                train_loss = train_fn(model, optimizer, scheduler, loss_tr, trainloader, hparams['device'])
-                valid_loss, valid_preds = valid_fn(model, loss_fn, validloader, hparams['device'])
+                train_loss = train_fn_dual(model, optimizer, scheduler, loss_tr, trainloader, hparams['device'])
+                valid_loss, valid_preds = valid_fn_dual(model, loss_fn, validloader, hparams['device'])
                 log.debug(f"sd: {seed:>2} fld: {fold:>2}, ep: {epoch:>3}, tr_loss: {train_loss:.6f}, "
                           f"vl_loss: {valid_loss:.6f}, doff_val: {last_valid_loss - valid_loss:>7.1e}")
                 if verbose:
@@ -302,15 +364,17 @@ def run_k_fold_nn_two_head(data_dict, hparams, cv, seed=42, file_prefix='m1', pr
             log.debug('')
 
         # --------------------- PREDICTION---------------------
-        testdataset = TestDataset(test[feature_cols].values)
+        testdataset = MoADatasetDual(test[feature_cols].values)
         testloader = torch.utils.data.DataLoader(testdataset, batch_size=hparams.datamodule.batch_size,
                                                  num_workers=hparams.datamodule.num_workers, shuffle=False)
 
-        model = Model(
-            num_features=len(feature_cols),
-            num_targets=len(target_cols),
-            hidden_size=hparams.model.hidden_size,
-            dropout=hparams.model.dropout_model,
+        model = NetTwoHead(
+            n_in=len(feature_cols),
+            n_h=hparams.model.hidden_size,
+            n_out=len(target_cols),
+            n_out1=train_targets_nonscored.shape[1],
+            loss=nn.BCEWithLogitsLoss(),
+            rloss=SmoothBCEwLogits(smoothing=0.001)
         )
 
         model.load_state_dict(torch.load(f"{hparams['path_model']}/{file_prefix}S{seed}FOLD{fold}.pth",
@@ -319,7 +383,7 @@ def run_k_fold_nn_two_head(data_dict, hparams, cv, seed=42, file_prefix='m1', pr
 
         model.to(hparams['device'])
 
-        pred_ = inference_fn(model, testloader, hparams['device'])
+        pred_ = inference_fn_dual(model, testloader, hparams['device'])
         del model
         gc.collect()
 

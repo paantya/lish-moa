@@ -67,16 +67,18 @@ class NetTwoHead(nn.Module):
     def __init__(self, n_in, n_h, n_out, n_out1, loss, rloss):
         super(NetTwoHead, self).__init__()
         self.fc1 = nn.Linear(n_in, n_h)
-        self.fc2 = nn.Linear(n_h, math.ceil(n_h / 4))
-        self.fc3 = nn.Linear(n_h, math.ceil(n_h / 4))
-        self.fc4 = nn.Linear(math.ceil(n_h / 4), n_out)
-        self.fc5 = nn.Linear(math.ceil(n_h / 4), n_out1)
+        self.fc11 = nn.Linear(n_h, n_h)
+        self.fc2 = nn.Linear(n_h, math.ceil(n_h / 2))
+        self.fc3 = nn.Linear(math.ceil(n_h / 2), n_out)
+        self.fc4 = nn.Linear(math.ceil(n_h / 2), n_out1)
         self.bn = nn.BatchNorm1d(n_in)
         self.bn1 = nn.BatchNorm1d(n_h)
-        self.bn2 = nn.BatchNorm1d(math.ceil(n_h / 4))
-        self.bn3 = nn.BatchNorm1d(math.ceil(n_h / 4))
-        self.bn4 = nn.BatchNorm1d(math.ceil(n_h / 4))
-        self.drop = nn.Dropout(0.4)
+        self.bn11 = nn.BatchNorm1d(n_h)
+        self.bn2 = nn.BatchNorm1d(math.ceil(n_h / 2))
+        self.drop = nn.Dropout(0.3)
+        self.drop11 = nn.Dropout(0.3)
+        self.drop1 = nn.Dropout(0.2)
+        self.drop2 = nn.Dropout(0.2)
         self.n_out = n_out
         self.selu = nn.SELU()
         self.sigm = nn.Sigmoid()
@@ -85,17 +87,17 @@ class NetTwoHead(nn.Module):
 
     def forward(self, x, targets, targets1):
         x = self.fc1(self.bn(x))
-        x = self.selu(x)
+        x = F.leaky_relu(x)
+        x = self.fc11(self.drop11(self.bn11(x)))
+        x = F.leaky_relu(x)
         x = self.fc2(self.drop(self.bn1(x)))
-        x = self.selu(x)
-        x = self.fc3(self.drop(self.bn2(x)))
-        x = self.selu(x)
+        x = F.leaky_relu(x)
 
         # scored targets
-        x1 = self.fc3(self.bn3(x))
+        x1 = self.fc3(self.drop1(self.bn2(x)))
         # non scored targets
-        x2 = self.fc4(self.bn4(x))
-        loss = (self.loss(x1, targets) + self.loss(x2, targets1)) / 2
+        x2 = self.fc4(self.drop2(self.bn2(x)))
+        loss = (2*self.loss(x1, targets) + self.loss(x2, targets1)) / 3
         real_loss = self.rloss(x1, targets)
         # probabilities
         out = self.sigm(x1)
