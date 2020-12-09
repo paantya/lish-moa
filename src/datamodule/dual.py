@@ -61,10 +61,10 @@ class MoADataModuleDual(pl.LightningDataModule):
         return valid_loader
 
     def test_dataloader(self):
-        valid_loader = torch.utils.data.DataLoader(
+        test_loader = torch.utils.data.DataLoader(
             self.valid_dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=False,
         )
-        return valid_loader
+        return test_loader

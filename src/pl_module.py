@@ -12,12 +12,106 @@ from torchvision.utils import make_grid
 from hydra.utils import instantiate
 from torch.utils.data import DataLoader
 
+
 # from src.models.networks.linear import EncoderLinear, DecoderLinear
 # from src.losses.xtanh import XTanhLoss
 # from src.losses.r2_score import R2Loss
 # from src.losses.log_cosh import LogCoshLoss
 # from src.losses.xsigmoid import XSigmoidLoss
 #
+
+class LitMoA(pl.LightningModule):
+    def __init__(self, hparams, model, loss_tr, loss_vl, loss_true=nn.Sigmoid, two_head=False, two_head_factor=None):
+        super(LitMoA, self).__init__()
+        if two_head_factor is None:
+            two_head_factor = [.5, .5]
+        self.hparams = hparams
+        self.model = model
+
+        self.loss_tr = loss_tr
+        self.loss_vl = loss_vl
+        self.loss_true = loss_true()
+
+        self.two_head = two_head
+        self.two_head_factor = two_head_factor
+
+        self.lr = 0.1 if self.hparams.lr == 'auto' else self.hparams.lr
+        self.batch_size = 128 if self.hparams.batch_size in ['auto', 'power', 'binsearch'] else self.hparams.batch_size
+
+        self.example_input_array = torch.zeros(self.batch_size, self.hparams.model.input_height)  # optional
+
+    def forward(self, x, *args, **kwargs):
+        if self.two_head:
+            return self.model(x)
+        else:
+            return self.model(x)
+
+    def configure_optimizers(self):
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=0.001)
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, factor=0.1, patience=2)
+
+        return (
+            [self.optimizer],
+            [{'scheduler': self.scheduler, 'interval': 'epoch', 'monitor': 'valid_loss'}],
+        )
+
+    def training_step(
+            self, batch: torch.Tensor, batch_idx: int
+    ):
+        data = batch['data']
+        target = batch['target']
+        target1 = batch['target1']
+        out = self(data)
+        if self.two_head:
+            out0, out1 = out
+            loss = (self.two_head_factor[0] * self.loss_tr(out0, target) +
+                    self.two_head_factor[1] * self.loss_tr(out1, target1)) / sum(self.two_head_factor)
+        else:
+            out0 = out
+            loss = self.loss_tr(out0, target)
+        real_loss = self.loss_vl(out0, target)
+        self.log('train_loss', loss, logger=True, prog_bar=True)
+        self.log('real_train_loss', real_loss, logger=True, on_epoch=True, prog_bar=True)
+
+        return {
+            'loss': loss,
+        }
+
+    # def training_epoch_end(self, outputs):
+    #     avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
+    #     real_avg_loss = torch.stack([x['real_train_loss'] for x in outputs]).mean()
+    #     logs = {'train_loss': avg_loss, 'real_train_loss': real_avg_loss}
+    #     return {'log': logs, 'progress_bar': logs}
+
+    def validation_step(
+            self, batch: torch.Tensor, batch_idx: int
+    ):
+        data = batch['data']
+        target = batch['target']
+        target1 = batch['target1']
+        out = self(data)
+        if self.two_head:
+            out0, out1 = out
+            loss = (self.two_head_factor[0] * self.loss_tr(out0, target) +
+                    self.two_head_factor[1] * self.loss_tr(out1, target1)) / sum(self.two_head_factor)
+        else:
+            out0 = out
+            loss = self.loss_tr(out0, target)
+        real_loss = self.loss_vl(out0, target)
+        logs = {'valid_loss': loss, 'real_valid_loss': real_loss}
+
+        self.log('valid_loss', loss, logger=True, on_epoch=True, prog_bar=True)
+        self.log('real_train_loss', real_loss, logger=True, on_epoch=True, prog_bar=True)
+        return {
+            'loss': loss
+        }
+
+    # def validation_epoch_end(self, outputs):
+    #     avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
+    #     real_avg_loss = torch.stack([x['real_valid_loss'] for x in outputs]).mean()
+    #
+    #     logs = {'valid_loss': avg_loss, 'real_valid_loss': real_avg_loss}
+    #     return {'valid_loss': avg_loss, 'log': logs, 'progress_bar': logs}
 
 
 class LishMoaPL(pl.LightningModule):
@@ -29,7 +123,7 @@ class LishMoaPL(pl.LightningModule):
         self.lr = 0.1 if self.hparams.lr == 'auto' else self.hparams.lr
         self.batch_size = 128 if self.hparams.batch_size in ['auto', 'power', 'binsearch'] else self.hparams.batch_size
 
-        self.example_input_array = torch.zeros(self.batch_size, self.hparams.model.input_height)# optional
+        self.example_input_array = torch.zeros(self.batch_size, self.hparams.model.input_height)  # optional
 
         self.criterion = self.get_criterion()
 
@@ -38,7 +132,6 @@ class LishMoaPL(pl.LightningModule):
             return self.net(x, targets)
         else:
             return self.net(x, targets, targets1)
-
 
     def training_step(self, batch, batch_idx: int) -> dict:
         x, _ = batch

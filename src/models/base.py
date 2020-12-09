@@ -1,6 +1,7 @@
 
 import torch.nn as nn
 import torch.nn.functional as F
+from src.layer.recalibrate import recalibrate_layer
 
 import math
 # model and SmoothingLoss
@@ -20,15 +21,15 @@ class Model_wn(nn.Module):
 
     def forward(self, x):
         x = self.batch_norm1(x)
-        x = F.leaky_relu(self.dense1(x))
+        x = F.leaky_relu(recalibrate_layer(self.dense1(x)))
 
         x = self.batch_norm2(x)
         x = self.dropout2(x)
-        x = F.leaky_relu(self.dense2(x))
+        x = F.leaky_relu(recalibrate_layer(self.dense2(x)))
 
         x = self.batch_norm3(x)
         x = self.dropout3(x)
-        x = self.dense3(x)
+        x = recalibrate_layer(self.dense3(x))
 
         return x
 
@@ -61,6 +62,34 @@ class Model(nn.Module):
         x = self.dense3(x)
 
         return x
+# model and SmoothingLoss
+class DenoisingAutoEncoder(nn.Module):
+    def __init__(self, num_features, hidden_size=[1024,2048], dropout=0.2, activation=F.leaky_relu):
+        super(DenoisingAutoEncoder, self).__init__()
+
+        self.activation = activation
+
+        self.encoder_list = [nn.Linear(num_features, hidden_size[0]),
+                             self.activation(True)]
+        for i in range(len(hidden_size) - 1):
+            self.encoder_list += [nn.Linear(hidden_size[i], hidden_size[i + 1]),
+                                  self.activation(True)]
+        self.encoder = nn.Sequential(*self.encoder_list)
+
+        self.decoder_list = []
+        for i in range(len(hidden_size) - 1):
+            self.decoder_list += [nn.Linear(hidden_size[i+1], hidden_size[i]),
+                                  self.activation(True)]
+        self.decoder_list += [nn.Linear(hidden_size[0], num_features),
+                              self.activation(True)]
+        self.decoder = nn.Sequential(*self.decoder_list)
+
+        # self.batch_norm2 = nn.BatchNorm1d(hidden_size)
+        # self.dropout2 = nn.Dropout(dropout)
+    def forward(self, x):
+        encode = self.encoder(x)
+        x = self.decoder(encode)
+        return encode, x
 
 
 class NetTwoHead(nn.Module):
@@ -97,8 +126,4 @@ class NetTwoHead(nn.Module):
         x1 = self.fc3(self.drop1(self.bn2(x)))
         # non scored targets
         x2 = self.fc4(self.drop2(self.bn2(x)))
-        loss = (2*self.loss(x1, targets) + self.loss(x2, targets1)) / 3
-        real_loss = self.rloss(x1, targets)
-        # probabilities
-        out = self.sigm(x1)
-        return out, loss, real_loss
+        return x1, x2
