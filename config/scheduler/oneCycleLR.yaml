@@ -1,0 +1,5 @@
+# @package _group_
+_target_: torch.optim.lr_scheduler.OneCycleLR
+pct_start: 0.1
+div_factor: 1e3
+max_lr: 1e-2

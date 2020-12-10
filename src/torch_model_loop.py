@@ -7,14 +7,19 @@ import numpy as np
 import pandas as pd
 import torch.nn as nn
 import torch.optim as optim
+import pytorch_lightning as pl
 from tqdm.auto import tqdm
 
 from src.loss.loss import SmoothBCEwLogits
 from src.models.base import Model, NetTwoHead
 from src.datasets.base import MoADataset, TestDataset
 from src.datasets.dual import MoADatasetDual
+from src.pl_module import LitMoANet, LitMoADae
 from src.data.process_data import preprocess_data, set_seed
 import gc
+
+
+from hydra.utils import instantiate
 
 
 
@@ -124,7 +129,7 @@ def inference_fn_dual(model, dataloader, device, batch_size=128):
 
     for ind, batch in enumerate(dataloader):
         with torch.no_grad():
-            pred = model(batch['data'].to(device),batch['target'].to(device),batch['target1'].to(device))[0].detach().cpu().numpy()
+            pred = model(batch['data'].to(device), batch['target'].to(device), batch['target1'].to(device))[0].detach().cpu().numpy()
         preds[ind * batch_size: ind * batch_size + pred.shape[0]] = pred
         if pred.shape[0] != batch_size:
             preds = preds[:-(batch_size-pred.shape[0])]
@@ -255,11 +260,177 @@ def run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, nu
 
         return predictions
 
-# run train one model
-def run_training_fold(hparams, x_train, y_train, x_valid, y_valid, test, num_features, num_targets, seed, verbose=False):
 
+# def run_k_fold_nn_two_head
+def run_k_fold_trainer(data_dict, hparams, model, model_params, trainer, trainer_params, cv, seed, prefix='t1', path_model='../models/', pretrain_model=True, verbose=0):
     log = logging.getLogger(f"{__name__}.{inspect.currentframe().f_code.co_name}")
+    set_seed(seed)
 
+    train_features = data_dict['train_features'].copy()
+    train_targets_scored = data_dict['train_targets_scored'].copy()
+    train_targets_nonscored = data_dict['train_targets_nonscored'].copy()
+    train = data_dict['train'].copy()
+    test = data_dict['test'].copy()
+    target = data_dict['target'].copy()
+    feature_cols = data_dict['feature_cols']
+    target_cols = data_dict['target_cols']
+
+
+    oof = np.zeros((len(data_dict['train']), len(data_dict['target_cols'])))
+    predictions = np.zeros((len(data_dict['test']), len(data_dict['target_cols'])))
+
+    for fold, (trn_idx, val_idx) in enumerate(tqdm(cv.split(X=train[feature_cols+['drug_id']], y=train[target_cols]),
+                                                   f'run {hparams[prefix].nfolds} folds',
+                                                   total=hparams[prefix].nfolds,
+                                                   leave=False)):
+        if not pretrain_model:
+            X_train, y_train = train[feature_cols].iloc[trn_idx].values, target[target_cols].iloc[trn_idx].values
+            X_valid, y_valid = train[feature_cols].iloc[val_idx].values, target[target_cols].iloc[val_idx].values
+            if hparams[prefix].two_head:
+                y1_train = train_targets_nonscored[train_targets_nonscored.columns].iloc[trn_idx].values
+                y1_valid = train_targets_nonscored[train_targets_nonscored.columns].iloc[val_idx].values
+
+            if not hparams[prefix].two_head:
+                data_module = instantiate(hparams[prefix].dataloader,
+                                          train_data=X_train, train_targets=y_train,
+                                          valid_data=X_valid, valid_targets=y_valid,
+                                          batch_size=hparams[prefix].dataloader.batch_size,
+                                          num_workers=hparams.datamodule.num_workers,
+                                          shuffle=True
+                                          )
+            else:
+                data_module = instantiate(hparams[prefix].dataloader,
+                                          train_data=X_train, train_targets=y_train, train_targets1=y1_train,
+                                          valid_data=X_valid, valid_targets=y_valid, valid_targets1=y1_valid,
+                                          batch_size=hparams[prefix].dataloader.batch_size,
+                                          num_workers=hparams.datamodule.num_workers,
+                                          shuffle=True
+                                          )
+
+            if not hparams[prefix].two_head:
+                model = instantiate(hparams[prefix].model, num_features=len(feature_cols), num_targets=len(target_cols))
+            else:
+                model = instantiate(hparams[prefix].model,
+                                    num_features=len(feature_cols),
+                                    num_targets=len(target_cols),
+                                    num_targets1=train_targets_nonscored.shape[1],
+                                    )
+
+            pl_module = instantiate(hparams[prefix].pl_modul,
+                                    hparams=hparams,
+                                    prefix=prefix,
+                                    model=model,
+                                    loss_tr=instantiate(hparams[prefix].pl_modul.loss_tr),
+                                    loss_vl=instantiate(hparams[prefix].pl_modul.loss_vl),
+                                    )
+            pl.Trainer(
+               **hparams[prefix].pl_trainer,
+               fast_dev_run=True,
+               weights_summary=None,
+            ).tune(pl_module, data_module)
+
+            if hparams[prefix].pl_trainer.gpus > 0 and hparams[prefix].batch_size in ['auto', 'power', 'binsearch']:
+                if hparams[prefix].batch_size == 'auto':
+                    hparams[prefix].batch_size = 'power'
+                pl.Trainer(
+                    **hparams[prefix].pl_trainer,
+                    auto_scale_batch_size=hparams[prefix].batch_size,
+                    weights_summary=None,
+                ).tune(pl_module, data_module)
+            if hparams[prefix].lr == 'auto':
+                pl.Trainer(
+                    **hparams[prefix].pl_trainer,
+                    auto_lr_find=True,
+                    weights_summary=None,
+                ).tune(pl_module, data_module)
+            checkpoint_callback = instantiate(hparams.modelcheckpoint)
+            print(checkpoint_callback)
+            callbacks = [instantiate(hparams.earlystopping)]
+
+            trainer = pl.Trainer(
+                **hparams[prefix].pl_trainer,
+                checkpoint_callback=checkpoint_callback,
+                callbacks=callbacks,
+                # logger=instantiate(cfg.logger, name=f'test/{experiment_name}'),
+                # weights_summary='full',
+            )
+            trainer.fit(pl_module, data_module)
+
+            oof_ = np.zeros((len(train), len(target_cols)))
+            best_loss = np.inf
+
+            if not hparams[prefix].two_head:
+                oof_[val_idx] = pl_module.model()
+            else:
+                oof_[val_idx] = pl_module.model()
+            # last_valid_loss = 0.0
+            # for epoch in range(int(hparams.model.epochs)):
+            #
+            #     train_loss = train_fn_dual(model, optimizer, scheduler, loss_tr, trainloader, hparams['device'])
+            #     valid_loss, valid_preds = valid_fn_dual(model, loss_fn, validloader, hparams['device'])
+            #     log.debug(f"sd: {seed:>2} fld: {fold:>2}, ep: {epoch:>3}, tr_loss: {train_loss:.6f}, "
+            #               f"vl_loss: {valid_loss:.6f}, doff_val: {last_valid_loss - valid_loss:>7.1e}")
+            #     if verbose:
+            #         print(f"sd: {seed:>2} fld: {fold:>2}, ep: {epoch:>3}, tr_loss: {train_loss:.6f}, "
+            #               f"vl_loss: {valid_loss:.6f}, doff_val: {last_valid_loss - valid_loss:>7.1e}")
+            #     last_valid_loss = valid_loss
+            #
+            #     if np.isnan(valid_loss):
+            #         log.info(f"valid_loss is nan")
+            #     if valid_loss < best_loss:
+            #
+            #         if np.isnan(valid_loss):
+            #             log.info(f"valid_loss is nan in save models.")
+            #
+            #         best_loss = valid_loss
+            #         oof_[val_idx] = valid_preds
+            #         torch.save(model.state_dict(), f"{hparams.path_model}/{prefix}S{seed}FOLD{fold}.pth")
+            #
+            #     elif (hparams.model.early_stop == True):
+            #
+            #         early_step += 1
+            #         if (early_step >= early_stopping_steps):
+            #             break
+
+            gc.collect()
+
+            if verbose:
+                print('')
+            log.debug('')
+
+        # --------------------- PREDICTION---------------------
+        testdataset = MoADatasetDual(test[feature_cols].values)
+        testloader = torch.utils.data.DataLoader(testdataset, batch_size=hparams.datamodule.batch_size,
+                                                 num_workers=hparams.datamodule.num_workers, shuffle=False)
+
+        model = NetTwoHead(
+            n_in=len(feature_cols),
+            n_h=hparams.model.hidden_size,
+            n_out=len(target_cols),
+            n_out1=train_targets_nonscored.shape[1],
+            loss=nn.BCEWithLogitsLoss(),
+            rloss=SmoothBCEwLogits(smoothing=0.001)
+        )
+
+        model.load_state_dict(torch.load(f"{hparams['path_model']}/{prefix}S{seed}FOLD{fold}.pth",
+                                         map_location=torch.device(hparams['device'])
+                                         ))
+
+        model.to(hparams['device'])
+
+        pred_ = inference_fn_dual(model, testloader, hparams['device'])
+        del model
+        gc.collect()
+
+        if not pretrain_model:
+            oof += oof_
+        predictions += pred_ / nfolds
+
+    gc.collect()
+    if not pretrain_model:
+        return oof, predictions
+    else:
+        return predictions
 
 
 # def run_k_fold_nn_two_head

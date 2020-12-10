@@ -1,0 +1,7 @@
+# @package _group_
+_target_: pytorch_lightning.callbacks.ModelCheckpoint
+save_top_k: 1
+verbose: false
+monitor: valid_loss
+mode: min
+prefix: ''

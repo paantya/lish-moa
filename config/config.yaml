@@ -1,8 +1,12 @@
 defaults:
   - model: train
+  - model1: model1
   - pl: gpu100
   - datamodule: gpu
   - quantile_transformer: normal
+  - scheduler: reduceLROnPlateau
+  - earlystopping: 10
+  - modelcheckpoint: top1
 #  - hydra/sweeper: ax
 hydra:
   run:

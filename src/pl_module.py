@@ -20,12 +20,13 @@ from torch.utils.data import DataLoader
 # from src.losses.xsigmoid import XSigmoidLoss
 #
 
-class LitMoA(pl.LightningModule):
-    def __init__(self, hparams, model, loss_tr, loss_vl, loss_true=nn.Sigmoid, two_head=False, two_head_factor=None):
-        super(LitMoA, self).__init__()
+class LitMoADae(pl.LightningModule):
+    def __init__(self, hparams, prefix, model, loss_tr, loss_vl, loss_true=nn.Sigmoid, two_head=False, two_head_factor=None):
+        super(LitMoADae, self).__init__()
         if two_head_factor is None:
             two_head_factor = [.5, .5]
         self.hparams = hparams
+        self.prefix = prefix
         self.model = model
 
         self.loss_tr = loss_tr
@@ -46,9 +47,136 @@ class LitMoA(pl.LightningModule):
         else:
             return self.model(x)
 
+    def get_optimizer(self) -> object:
+        tmp = {
+            'adamw': torch.optim.AdamW,
+            'adam': torch.optim.Adam,
+            'sgd': torch.optim.SGD,
+        }
+        optimizer = tmp[self.hparams[self.prefix].optimizer.name](
+            params=self.model.parameters(), lr=self.lr, weight_decay=self.hparams[self.prefix].optimizer.weight_decay,
+        )
+        return optimizer
+
+    def get_scheduler(self, optimizer) -> object:
+        scheduler = instantiate(self.hparams.scheduler, optimizer=optimizer)
+        return scheduler
+
     def configure_optimizers(self):
-        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=0.001)
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, factor=0.1, patience=2)
+        self.optimizer = self.get_optimizer()
+        self.scheduler = self.get_scheduler(self.optimizer)
+
+        return (
+            [self.optimizer],
+            [{'scheduler': self.scheduler, 'interval': 'epoch', 'monitor': 'valid_loss'}],
+        )
+
+    def training_step(
+            self, batch: torch.Tensor, batch_idx: int
+    ):
+        data = batch['data']
+        target = batch['target']
+        target1 = batch['target1']
+        out = self(data)
+        if self.two_head:
+            encode, data_out1, data_out2 = out
+            loss = (self.two_head_factor[0] * self.loss_tr(data_out1, target) +
+                    self.two_head_factor[1] * self.loss_tr(data_out2, target1)) / sum(self.two_head_factor)
+            real_loss = (self.two_head_factor[0] * self.loss_vl(data_out1, target) +
+                    self.two_head_factor[1] * self.loss_vl(data_out2, target1)) / sum(self.two_head_factor)
+        else:
+            encode, data_out1 = out
+            loss = self.loss_tr(data_out1, target)
+            real_loss = self.loss_vl(data_out1, target)
+        self.log('train_loss', loss, logger=True, prog_bar=True)
+        self.log('real_train_loss', real_loss, logger=True, on_epoch=True, prog_bar=True)
+        return {
+            'loss': loss,
+        }
+
+    # def training_epoch_end(self, outputs):
+    #     avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
+    #     real_avg_loss = torch.stack([x['real_train_loss'] for x in outputs]).mean()
+    #     logs = {'train_loss': avg_loss, 'real_train_loss': real_avg_loss}
+    #     return {'log': logs, 'progress_bar': logs}
+
+    def validation_step(
+            self, batch: torch.Tensor, batch_idx: int
+    ):
+        data = batch['data']
+        target = batch['target']
+        target1 = batch['target1']
+        out = self(data)
+        if self.two_head:
+            encode, data_out1, data_out2 = out
+            loss = (self.two_head_factor[0] * self.loss_tr(data_out1, target) +
+                    self.two_head_factor[1] * self.loss_tr(data_out2, target1)) / sum(self.two_head_factor)
+            real_loss = (self.two_head_factor[0] * self.loss_vl(data_out1, target) +
+                    self.two_head_factor[1] * self.loss_vl(data_out2, target1)) / sum(self.two_head_factor)
+        else:
+            encode, data_out1 = out
+            loss = self.loss_tr(data_out1, target)
+            real_loss = self.loss_vl(data_out1, target)
+
+        self.log('valid_loss', loss, logger=True, on_epoch=True, prog_bar=True)
+        self.log('real_train_loss', real_loss, logger=True, on_epoch=True, prog_bar=True)
+        return {
+            'loss': loss
+        }
+
+    # def validation_epoch_end(self, outputs):
+    #     avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
+    #     real_avg_loss = torch.stack([x['real_valid_loss'] for x in outputs]).mean()
+    #
+    #     logs = {'valid_loss': avg_loss, 'real_valid_loss': real_avg_loss}
+    #     return {'valid_loss': avg_loss, 'log': logs, 'progress_bar': logs}
+
+
+class LitMoANet(pl.LightningModule):
+    def __init__(self, hparams, prefix, model, loss_tr, loss_vl, loss_true=nn.Sigmoid, two_head=False, two_head_factor=None):
+        super(LitMoANet, self).__init__()
+        if two_head_factor is None:
+            two_head_factor = [.5, .5]
+        self.hparams = hparams
+        self.prefix = prefix
+        self.model = model
+
+        self.loss_tr = loss_tr
+        self.loss_vl = loss_vl
+        self.loss_true = loss_true()
+
+        self.two_head = two_head
+        self.two_head_factor = two_head_factor
+
+        self.lr = 0.1 if self.hparams[self.prefix].lr == 'auto' else self.hparams[self.prefix].lr
+        self.batch_size = 128 if self.hparams[self.prefix].batch_size in ['auto', 'power', 'binsearch'] else self.hparams[self.prefix].batch_size
+
+        self.example_input_array = torch.zeros(self.batch_size, self.model.input_height)  # optional
+
+    def forward(self, x, *args, **kwargs):
+        if self.two_head:
+            return self.model(x)
+        else:
+            return self.model(x)
+
+    def get_optimizer(self) -> object:
+        tmp = {
+            'adamw': torch.optim.AdamW,
+            'adam': torch.optim.Adam,
+            'sgd': torch.optim.SGD,
+        }
+        optimizer = tmp[self.hparams[self.prefix].optimizer.name](
+            params=self.model.parameters(), lr=self.lr, weight_decay=self.hparams[self.prefix].optimizer.weight_decay,
+        )
+        return optimizer
+
+    def get_scheduler(self, optimizer) -> object:
+        scheduler = instantiate(self.hparams[self.prefix].scheduler, optimizer=optimizer)
+        return scheduler
+
+    def configure_optimizers(self):
+        self.optimizer = self.get_optimizer()
+        self.scheduler = self.get_scheduler(self.optimizer)
 
         return (
             [self.optimizer],

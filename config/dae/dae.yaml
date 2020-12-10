@@ -1,0 +1,22 @@
+# @package _group_
+net:
+  _target_: src.models.dae.DenoisingAutoEncoder
+  hidden_size: [1024,2048]
+pl_modul:
+  loss_tr:
+    _target_: torch.nn.MSELoss
+  loss_vl:
+    _target_: torch.nn.MSELoss
+optimizer:
+  name: adamw
+  weight_decay: 0.001
+dataloader:
+  _target_: src.datamodule.single.MoADataModuleSingle
+  batch_size: 128
+pl_trainer:
+  _target_: src.datamodule.single.MoADataModuleSingle
+  default_root_dir: '../models/'
+  max_epochs: 100
+  min_epochs: 10
+  gradient_clip_val: 0.5
+  two_head: false

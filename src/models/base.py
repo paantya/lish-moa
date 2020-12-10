@@ -1,13 +1,20 @@
-
 import torch.nn as nn
 import torch.nn.functional as F
 from src.layer.recalibrate import recalibrate_layer
 
 import math
+
+
 # model and SmoothingLoss
 class Model_wn(nn.Module):
     def __init__(self, num_features, num_targets, hidden_size, dropout=0.2):
         super(Model_wn, self).__init__()
+
+        self.num_features = num_features
+        self.num_targets = num_targets
+        self.hidden_size = hidden_size
+        self.dropout = dropout
+
         self.batch_norm1 = nn.BatchNorm1d(num_features)
         self.dense1 = nn.utils.weight_norm(nn.Linear(num_features, hidden_size))
 
@@ -38,6 +45,12 @@ class Model_wn(nn.Module):
 class Model(nn.Module):
     def __init__(self, num_features, num_targets, hidden_size, dropout=0.2):
         super(Model, self).__init__()
+
+        self.num_features = num_features
+        self.num_targets = num_targets
+        self.hidden_size = hidden_size
+        self.dropout = dropout
+
         self.batch_norm1 = nn.BatchNorm1d(num_features)
         self.dense1 = nn.Linear(num_features, hidden_size)
 
@@ -62,34 +75,6 @@ class Model(nn.Module):
         x = self.dense3(x)
 
         return x
-# model and SmoothingLoss
-class DenoisingAutoEncoder(nn.Module):
-    def __init__(self, num_features, hidden_size=[1024,2048], dropout=0.2, activation=F.leaky_relu):
-        super(DenoisingAutoEncoder, self).__init__()
-
-        self.activation = activation
-
-        self.encoder_list = [nn.Linear(num_features, hidden_size[0]),
-                             self.activation(True)]
-        for i in range(len(hidden_size) - 1):
-            self.encoder_list += [nn.Linear(hidden_size[i], hidden_size[i + 1]),
-                                  self.activation(True)]
-        self.encoder = nn.Sequential(*self.encoder_list)
-
-        self.decoder_list = []
-        for i in range(len(hidden_size) - 1):
-            self.decoder_list += [nn.Linear(hidden_size[i+1], hidden_size[i]),
-                                  self.activation(True)]
-        self.decoder_list += [nn.Linear(hidden_size[0], num_features),
-                              self.activation(True)]
-        self.decoder = nn.Sequential(*self.decoder_list)
-
-        # self.batch_norm2 = nn.BatchNorm1d(hidden_size)
-        # self.dropout2 = nn.Dropout(dropout)
-    def forward(self, x):
-        encode = self.encoder(x)
-        x = self.decoder(encode)
-        return encode, x
 
 
 class NetTwoHead(nn.Module):
@@ -115,6 +100,44 @@ class NetTwoHead(nn.Module):
         self.rloss = rloss
 
     def forward(self, x, targets, targets1):
+        x = self.fc1(self.bn(x))
+        x = F.leaky_relu(x)
+        x = self.fc11(self.drop11(self.bn11(x)))
+        x = F.leaky_relu(x)
+        x = self.fc2(self.drop(self.bn1(x)))
+        x = F.leaky_relu(x)
+
+        # scored targets
+        x1 = self.fc3(self.drop1(self.bn2(x)))
+        # non scored targets
+        x2 = self.fc4(self.drop2(self.bn2(x)))
+        loss = (self.loss(x1, targets) + self.loss(x2, targets1)) / 2
+        rloss = self.rloss(x1, targets)
+        out = self.sigm(x1)
+        return out, loss, rloss
+
+
+class TwoHead(nn.Module):
+    def __init__(self, num_features, hidden_size, num_targets, num_targets1):
+        super(TwoHead, self).__init__()
+        self.fc1 = nn.Linear(num_features, hidden_size)
+        self.fc11 = nn.Linear(hidden_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, math.ceil(hidden_size // 2))
+        self.fc3 = nn.Linear(math.ceil(hidden_size // 2), num_targets)
+        self.fc4 = nn.Linear(math.ceil(hidden_size // 2), num_targets1)
+        self.bn = nn.BatchNorm1d(num_features)
+        self.bn1 = nn.BatchNorm1d(hidden_size)
+        self.bn11 = nn.BatchNorm1d(hidden_size)
+        self.bn2 = nn.BatchNorm1d(math.ceil(hidden_size // 2))
+        self.drop = nn.Dropout(0.3)
+        self.drop11 = nn.Dropout(0.3)
+        self.drop1 = nn.Dropout(0.2)
+        self.drop2 = nn.Dropout(0.2)
+        self.n_out = num_targets
+        self.selu = nn.SELU()
+        self.sigm = nn.Sigmoid()
+
+    def forward(self, x):
         x = self.fc1(self.bn(x))
         x = F.leaky_relu(x)
         x = self.fc11(self.drop11(self.bn11(x)))

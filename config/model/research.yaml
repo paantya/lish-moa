@@ -7,10 +7,6 @@ weight_decay: 1e-5
 early_stopping_steps: 10
 early_stop: false
 
-hidden_size: 1500
-
-dropout_model: 0.25
-
 # PCA
 n_comp_genes: 463
 n_comp_cells: 60
