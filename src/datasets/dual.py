@@ -12,10 +12,10 @@ from torch.utils.data import Dataset
 class MoADatasetDual(Dataset):
     def __init__(
             self,
-            data,
-            targets=None,
-            targets1=None,
-            mode='train'
+            x,
+            y=None,
+            y1=None,
+            mode='train',
     ):
         """
 
@@ -23,22 +23,24 @@ class MoADatasetDual(Dataset):
         """
 
         self.mode = mode
-        self.data = data
-        self.targets = targets
-        self.targets1 = targets1
+        self.data = x
+        self.targets = y
+        self.targets1 = y1
 
     def __getitem__(self, idx: int) -> Dict[str, np.array]:
         data = self.data[idx]
         if self.targets is not None:
             target = self.targets[idx]
-            target1 = self.targets1[idx]
         else:
             target = np.zeros((206,))
+        if self.targets1 is not None:
+            target1 = self.targets1[idx]
+        else:
             target1 = np.zeros((402,))
 
-        sample = {'data': torch.tensor(data).float(),
-                  'target': torch.tensor(target).float(),
-                  'target1': torch.tensor(target1).float()
+        sample = {'x': torch.tensor(data).float(),
+                  'y': torch.tensor(target).float(),
+                  'y1': torch.tensor(target1).float()
                   }
 
         return sample

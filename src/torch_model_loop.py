@@ -138,6 +138,19 @@ def inference_fn_dual(model, dataloader, device, batch_size=128):
     return preds
 
 
+def inference(model, dataloader, batch_size=128):
+    model.eval()
+    preds = np.zeros((len(dataloader)*batch_size, 206))
+
+    for ind, batch in enumerate(dataloader):
+        with torch.no_grad():
+            pred = model(**batch)[0].detach().cpu().numpy()
+        preds[ind * batch_size: ind * batch_size + pred.shape[0]] = pred
+        if pred.shape[0] != batch_size:
+            preds = preds[:-(batch_size-pred.shape[0])]
+    gc.collect()
+    return preds
+
 def inference_fn(model, dataloader, device, batch_size=128):
     model.eval()
     preds = np.zeros((len(dataloader)*batch_size, 206))
@@ -308,20 +321,25 @@ def run_k_fold_trainer(data_dict, hparams, model, model_params, trainer, trainer
                                           )
 
             if not hparams[prefix].two_head:
-                model = instantiate(hparams[prefix].model, num_features=len(feature_cols), num_targets=len(target_cols))
+                model = instantiate(hparams[prefix].model,
+                                    num_features=len(feature_cols),
+                                    num_targets=len(target_cols),
+                                    loss_tr=instantiate(hparams[prefix].pl_modul.loss_tr),
+                                    loss_vl=instantiate(hparams[prefix].pl_modul.loss_vl),
+                                    )
             else:
                 model = instantiate(hparams[prefix].model,
                                     num_features=len(feature_cols),
                                     num_targets=len(target_cols),
                                     num_targets1=train_targets_nonscored.shape[1],
+                                    loss_tr=instantiate(hparams[prefix].pl_modul.loss_tr),
+                                    loss_vl=instantiate(hparams[prefix].pl_modul.loss_vl),
                                     )
 
             pl_module = instantiate(hparams[prefix].pl_modul,
                                     hparams=hparams,
                                     prefix=prefix,
                                     model=model,
-                                    loss_tr=instantiate(hparams[prefix].pl_modul.loss_tr),
-                                    loss_vl=instantiate(hparams[prefix].pl_modul.loss_vl),
                                     )
             pl.Trainer(
                **hparams[prefix].pl_trainer,
@@ -351,6 +369,7 @@ def run_k_fold_trainer(data_dict, hparams, model, model_params, trainer, trainer
                 **hparams[prefix].pl_trainer,
                 checkpoint_callback=checkpoint_callback,
                 callbacks=callbacks,
+                filepath=f"{hparams['path_model']}/{prefix}S{seed}F{fold}.pth",
                 # logger=instantiate(cfg.logger, name=f'test/{experiment_name}'),
                 # weights_summary='full',
             )
@@ -359,38 +378,10 @@ def run_k_fold_trainer(data_dict, hparams, model, model_params, trainer, trainer
             oof_ = np.zeros((len(train), len(target_cols)))
             best_loss = np.inf
 
-            if not hparams[prefix].two_head:
-                oof_[val_idx] = pl_module.model()
-            else:
-                oof_[val_idx] = pl_module.model()
-            # last_valid_loss = 0.0
-            # for epoch in range(int(hparams.model.epochs)):
-            #
-            #     train_loss = train_fn_dual(model, optimizer, scheduler, loss_tr, trainloader, hparams['device'])
-            #     valid_loss, valid_preds = valid_fn_dual(model, loss_fn, validloader, hparams['device'])
-            #     log.debug(f"sd: {seed:>2} fld: {fold:>2}, ep: {epoch:>3}, tr_loss: {train_loss:.6f}, "
-            #               f"vl_loss: {valid_loss:.6f}, doff_val: {last_valid_loss - valid_loss:>7.1e}")
-            #     if verbose:
-            #         print(f"sd: {seed:>2} fld: {fold:>2}, ep: {epoch:>3}, tr_loss: {train_loss:.6f}, "
-            #               f"vl_loss: {valid_loss:.6f}, doff_val: {last_valid_loss - valid_loss:>7.1e}")
-            #     last_valid_loss = valid_loss
-            #
-            #     if np.isnan(valid_loss):
-            #         log.info(f"valid_loss is nan")
-            #     if valid_loss < best_loss:
-            #
-            #         if np.isnan(valid_loss):
-            #             log.info(f"valid_loss is nan in save models.")
-            #
-            #         best_loss = valid_loss
-            #         oof_[val_idx] = valid_preds
-            #         torch.save(model.state_dict(), f"{hparams.path_model}/{prefix}S{seed}FOLD{fold}.pth")
-            #
-            #     elif (hparams.model.early_stop == True):
-            #
-            #         early_step += 1
-            #         if (early_step >= early_stopping_steps):
-            #             break
+            oof_[val_idx] = inference(pl_module.model,
+                                      data_module.val_dataloader(),
+                                      batch_size=hparams[prefix].dataloader.batch_size
+                                      )
 
             gc.collect()
 

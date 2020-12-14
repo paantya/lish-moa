@@ -32,10 +32,14 @@ class MoADataModuleSingle(pl.LightningDataModule):
         pass
 
     def setup(self, stage=None):
-        self.train_dataset = MoADatasetSingle(data=self.train_data.iloc[:, 1:].values,
-                                        targets=self.train_targets.iloc[:, 1:].values)
-        self.valid_dataset = MoADatasetSingle(data=self.valid_data.iloc[:, 1:].values,
-                                        targets=self.valid_targets.iloc[:, 1:].values)
+        self.train_dataset = MoADatasetSingle(x=self.train_data,
+                                              y=self.train_targets,
+                                              mode='train',
+                                              )
+        self.valid_dataset = MoADatasetSingle(x=self.valid_data,
+                                              y=self.valid_targets,
+                                              mode='valid',
+                                              )
 
     def train_dataloader(self):
         train_loader = torch.utils.data.DataLoader(

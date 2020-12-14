@@ -1,8 +1,9 @@
+import math
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from src.layer.recalibrate import recalibrate_layer
 
-import math
 
 
 # model and SmoothingLoss
@@ -43,12 +44,14 @@ class Model_wn(nn.Module):
 
 # model and SmoothingLoss
 class Model(nn.Module):
-    def __init__(self, num_features, num_targets, hidden_size, dropout=0.2):
+    def __init__(self, num_features, num_targets, hidden_size, loss_tr, loss_vl, dropout=0.2):
         super(Model, self).__init__()
 
         self.num_features = num_features
         self.num_targets = num_targets
         self.hidden_size = hidden_size
+        self.loss_tr = loss_tr
+        self.loss_vl = loss_vl
         self.dropout = dropout
 
         self.batch_norm1 = nn.BatchNorm1d(num_features)
@@ -62,7 +65,7 @@ class Model(nn.Module):
         self.dropout3 = nn.Dropout(dropout)
         self.dense3 = nn.Linear(hidden_size, num_targets)
 
-    def forward(self, x):
+    def forward(self, x, y):
         x = self.batch_norm1(x)
         x = F.leaky_relu(self.dense1(x))
 
@@ -74,7 +77,9 @@ class Model(nn.Module):
         x = self.dropout3(x)
         x = self.dense3(x)
 
-        return x
+        loss = self.loss_tr(x, y)
+        loss_real = self.loss_tr(x, y)
+        return x, loss, loss_real
 
 
 class NetTwoHead(nn.Module):
@@ -118,8 +123,15 @@ class NetTwoHead(nn.Module):
 
 
 class TwoHead(nn.Module):
-    def __init__(self, num_features, hidden_size, num_targets, num_targets1):
+    def __init__(self, num_features, hidden_size, num_targets, num_targets1, loss_tr, loss_vl, two_head_factor=None):
         super(TwoHead, self).__init__()
+        if two_head_factor is None:
+            self.two_head_factor = [.5, .5]
+        else:
+            self.two_head_factor = two_head_factor
+        self.loss_tr = loss_tr
+        self.loss_vl = loss_vl
+
         self.fc1 = nn.Linear(num_features, hidden_size)
         self.fc11 = nn.Linear(hidden_size, hidden_size)
         self.fc2 = nn.Linear(hidden_size, math.ceil(hidden_size // 2))
@@ -137,7 +149,7 @@ class TwoHead(nn.Module):
         self.selu = nn.SELU()
         self.sigm = nn.Sigmoid()
 
-    def forward(self, x):
+    def forward(self, x, y, y1):
         x = self.fc1(self.bn(x))
         x = F.leaky_relu(x)
         x = self.fc11(self.drop11(self.bn11(x)))
@@ -149,4 +161,9 @@ class TwoHead(nn.Module):
         x1 = self.fc3(self.drop1(self.bn2(x)))
         # non scored targets
         x2 = self.fc4(self.drop2(self.bn2(x)))
-        return x1, x2
+        loss = (self.two_head_factor[0] * self.loss_tr(x1, y) +
+                self.two_head_factor[1] * self.loss_tr(x2, y1)) / \
+               torch.sum(self.two_head_factor)
+        loss_real = self.loss_vl(x1, y1)
+
+        return x1, loss, loss_real

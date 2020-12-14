@@ -13,9 +13,9 @@ from torch.utils.data import Dataset
 class MoADatasetSingle(Dataset):
     def __init__(
             self,
-            data,
-            targets=None,
-            mode='train'
+            x,
+            y=None,
+            mode='train',
     ):
         """
 
@@ -23,8 +23,8 @@ class MoADatasetSingle(Dataset):
         """
 
         self.mode = mode
-        self.data = data
-        self.targets = targets
+        self.data = x
+        self.targets = y
 
     def __getitem__(self, idx: int) -> Dict[str, np.array]:
         data = self.data[idx]
@@ -33,8 +33,8 @@ class MoADatasetSingle(Dataset):
         else:
             target = np.zeros((206,))
 
-        sample = {'data': torch.tensor(data).float(),
-                  'target': torch.tensor(target).float()
+        sample = {'x': torch.tensor(data).float(),
+                  'y': torch.tensor(target).float()
                   }
 
         return sample

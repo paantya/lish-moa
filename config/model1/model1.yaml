@@ -7,15 +7,15 @@ model:
   _target_: src.models.base.Model
   hidden_size: 1500
   dropout: 0.25
-pl_modul:
-  _target_: src.pl_module.LitMoANet
-  two_head: false
-  two_head_factor: null
   loss_tr:
     _target_: src.loss.loss.SmoothBCEwLogits
     smoothing: 0.001
   loss_vl:
     _target_: torch.nn.BCEWithLogitsLoss
+  two_head_factor: null
+pl_modul:
+  _target_: src.pl_module.LitMoANet
+  two_head: false
 optimizer:
   name: adamw
   weight_decay: 0.001

@@ -2,7 +2,6 @@
 __author__ = "paantya: https://kaggle.com/paantya"
 __forkfrom__ = "tiulpin: https://kaggle.com/tiulpin"
 
-
 from typing import Tuple, Union, Dict
 
 import torch
@@ -35,12 +34,16 @@ class MoADataModuleDual(pl.LightningDataModule):
         pass
 
     def setup(self, stage=None):
-        self.train_dataset = MoADatasetDual(data=self.train_data.iloc[:, 1:].values,
-                                        targets=self.train_targets.iloc[:, 1:].values,
-                                        targets1=self.train_targets1.iloc[:, 1:].values)
-        self.valid_dataset = MoADatasetDual(data=self.valid_data.iloc[:, 1:].values,
-                                        targets=self.valid_targets.iloc[:, 1:].values,
-                                        targets1=self.valid_targets1.iloc[:, 1:].values)
+        self.train_dataset = MoADatasetDual(x=self.train_data,
+                                            y=self.train_targets,
+                                            y1=self.train_targets1,
+                                            mode='train',
+                                            )
+        self.valid_dataset = MoADatasetDual(x=self.valid_data,
+                                            y=self.valid_targets,
+                                            y1=self.valid_targets1,
+                                            mode='valid',
+                                            )
 
     def train_dataloader(self):
         train_loader = torch.utils.data.DataLoader(
