@@ -11,7 +11,8 @@ from src.datasets.dual import MoADatasetDual
 
 
 class MoADataModuleDual(pl.LightningDataModule):
-    def __init__(self, hparams: Dict,
+    def __init__(self,
+                 # hparams: Dict,
                  train_data, train_targets, train_targets1,
                  valid_data, valid_targets, valid_targets1,
                  batch_size=128,
@@ -19,7 +20,7 @@ class MoADataModuleDual(pl.LightningDataModule):
                  shuffle=False,
                  ):
         super().__init__()
-        self.hparams = hparams
+        # self.hparams = hparams
         self.train_data = train_data
         self.train_targets = train_targets
         self.train_targets1 = train_targets1

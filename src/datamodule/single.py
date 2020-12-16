@@ -11,7 +11,8 @@ from src.datasets.single import MoADatasetSingle
 
 
 class MoADataModuleSingle(pl.LightningDataModule):
-    def __init__(self, hparams: Dict,
+    def __init__(self,
+                 # hparams: Dict,
                  train_data, train_targets,
                  valid_data, valid_targets,
                  batch_size=128,
@@ -19,7 +20,7 @@ class MoADataModuleSingle(pl.LightningDataModule):
                  shuffle=False,
                  ):
         super().__init__()
-        self.hparams = hparams
+        # self.hparams = hparams
         self.train_data = train_data
         self.train_targets = train_targets
         self.valid_data = valid_data

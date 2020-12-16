@@ -1,7 +1,7 @@
 # @package _group_
 _target_: pytorch_lightning.Trainer
 gpus: 1
-default_root_dir: '../model/'
+default_root_dir: '../models/'
 max_epochs: 100
 min_epochs: 5
 log_gpu_memory: 'all'

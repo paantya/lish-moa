@@ -13,8 +13,8 @@ from tqdm.auto import tqdm
 from src.loss.loss import SmoothBCEwLogits
 from src.models.base import Model, NetTwoHead
 from src.datasets.base import MoADataset, TestDataset
+from src.datasets.single import MoADatasetSingle
 from src.datasets.dual import MoADatasetDual
-from src.pl_module import LitMoANet, LitMoADae
 from src.data.process_data import preprocess_data, set_seed
 import gc
 
@@ -139,12 +139,13 @@ def inference_fn_dual(model, dataloader, device, batch_size=128):
 
 
 def inference(model, dataloader, batch_size=128):
+    model.to('cpu')
     model.eval()
     preds = np.zeros((len(dataloader)*batch_size, 206))
 
     for ind, batch in enumerate(dataloader):
         with torch.no_grad():
-            pred = model(**batch)[0].detach().cpu().numpy()
+            pred = model(**{k:v.to('cpu')for k,v in batch.items()})[0].detach().cpu().numpy()
         preds[ind * batch_size: ind * batch_size + pred.shape[0]] = pred
         if pred.shape[0] != batch_size:
             preds = preds[:-(batch_size-pred.shape[0])]
@@ -275,7 +276,7 @@ def run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, nu
 
 
 # def run_k_fold_nn_two_head
-def run_k_fold_trainer(data_dict, hparams, model, model_params, trainer, trainer_params, cv, seed, prefix='t1', path_model='../models/', pretrain_model=True, verbose=0):
+def run_k_fold_trainer(data_dict, hparams, cv, seed, iseed, prefix='t1', pretrain_model=False, verbose=0):
     log = logging.getLogger(f"{__name__}.{inspect.currentframe().f_code.co_name}")
     set_seed(seed)
 
@@ -296,57 +297,48 @@ def run_k_fold_trainer(data_dict, hparams, model, model_params, trainer, trainer
                                                    f'run {hparams[prefix].nfolds} folds',
                                                    total=hparams[prefix].nfolds,
                                                    leave=False)):
+
+        oof_ = np.zeros((len(train), len(target_cols)))
+        train_valid_data = {
+            'train_data': train[feature_cols].iloc[trn_idx].values,
+            'train_targets': target[target_cols].iloc[trn_idx].values,
+            'valid_data': train[feature_cols].iloc[val_idx].values,
+            'valid_targets': target[target_cols].iloc[val_idx].values,
+        }
+        num_features_targets = {
+            'num_features': len(feature_cols),
+            'num_targets': len(target_cols),
+        }
+        if hparams[prefix].two_head:
+            train_valid_data['train_targets1'] = train_targets_nonscored[train_targets_nonscored.columns].iloc[
+                trn_idx].values
+            train_valid_data['valid_targets1'] = train_targets_nonscored[train_targets_nonscored.columns].iloc[
+                val_idx].values
+            num_features_targets['num_targets1'] = train_targets_nonscored.shape[1]
+        data_module = instantiate(hparams[prefix].dataloader,
+                                  **train_valid_data,
+                                  batch_size=hparams[prefix].batch_size,
+                                  num_workers=hparams.datamodule.num_workers,
+                                  shuffle=True,
+                                  )
         if not pretrain_model:
-            X_train, y_train = train[feature_cols].iloc[trn_idx].values, target[target_cols].iloc[trn_idx].values
-            X_valid, y_valid = train[feature_cols].iloc[val_idx].values, target[target_cols].iloc[val_idx].values
-            if hparams[prefix].two_head:
-                y1_train = train_targets_nonscored[train_targets_nonscored.columns].iloc[trn_idx].values
-                y1_valid = train_targets_nonscored[train_targets_nonscored.columns].iloc[val_idx].values
-
-            if not hparams[prefix].two_head:
-                data_module = instantiate(hparams[prefix].dataloader,
-                                          train_data=X_train, train_targets=y_train,
-                                          valid_data=X_valid, valid_targets=y_valid,
-                                          batch_size=hparams[prefix].dataloader.batch_size,
-                                          num_workers=hparams.datamodule.num_workers,
-                                          shuffle=True
-                                          )
-            else:
-                data_module = instantiate(hparams[prefix].dataloader,
-                                          train_data=X_train, train_targets=y_train, train_targets1=y1_train,
-                                          valid_data=X_valid, valid_targets=y_valid, valid_targets1=y1_valid,
-                                          batch_size=hparams[prefix].dataloader.batch_size,
-                                          num_workers=hparams.datamodule.num_workers,
-                                          shuffle=True
-                                          )
-
-            if not hparams[prefix].two_head:
-                model = instantiate(hparams[prefix].model,
-                                    num_features=len(feature_cols),
-                                    num_targets=len(target_cols),
-                                    loss_tr=instantiate(hparams[prefix].pl_modul.loss_tr),
-                                    loss_vl=instantiate(hparams[prefix].pl_modul.loss_vl),
-                                    )
-            else:
-                model = instantiate(hparams[prefix].model,
-                                    num_features=len(feature_cols),
-                                    num_targets=len(target_cols),
-                                    num_targets1=train_targets_nonscored.shape[1],
-                                    loss_tr=instantiate(hparams[prefix].pl_modul.loss_tr),
-                                    loss_vl=instantiate(hparams[prefix].pl_modul.loss_vl),
-                                    )
-
+            model = instantiate(hparams[prefix].model,
+                                **num_features_targets,
+                                loss_tr=instantiate(hparams[prefix].loss_tr),
+                                loss_vl=instantiate(hparams[prefix].loss_vl),
+                                )
             pl_module = instantiate(hparams[prefix].pl_modul,
                                     hparams=hparams,
                                     prefix=prefix,
                                     model=model,
                                     )
             pl.Trainer(
-               **hparams[prefix].pl_trainer,
-               fast_dev_run=True,
-               weights_summary=None,
-            ).tune(pl_module, data_module)
-
+                **hparams[prefix].pl_trainer,
+                fast_dev_run=True,
+                weights_summary=None,
+            ).tune(model=pl_module, datamodule=data_module)
+            if hparams['device'] != 'cpu':
+                hparams[prefix].pl_trainer['gpus'] = 1
             if hparams[prefix].pl_trainer.gpus > 0 and hparams[prefix].batch_size in ['auto', 'power', 'binsearch']:
                 if hparams[prefix].batch_size == 'auto':
                     hparams[prefix].batch_size = 'power'
@@ -354,74 +346,64 @@ def run_k_fold_trainer(data_dict, hparams, model, model_params, trainer, trainer
                     **hparams[prefix].pl_trainer,
                     auto_scale_batch_size=hparams[prefix].batch_size,
                     weights_summary=None,
-                ).tune(pl_module, data_module)
+                ).tune(model=pl_module, datamodule=data_module)
             if hparams[prefix].lr == 'auto':
                 pl.Trainer(
                     **hparams[prefix].pl_trainer,
                     auto_lr_find=True,
                     weights_summary=None,
-                ).tune(pl_module, data_module)
-            checkpoint_callback = instantiate(hparams.modelcheckpoint)
-            print(checkpoint_callback)
+                ).tune(model=pl_module, datamodule=data_module)
+            checkpoint_callback = instantiate(hparams.modelcheckpoint,
+                                              filepath=f"{hparams['path_model']}/{prefix}S{seed}F{fold}",
+                                              # filename=f"{prefix}S{seed}F{fold}",
+                                              # dirpath=f"{hparams['path_model']}",
+                                              )
             callbacks = [instantiate(hparams.earlystopping)]
 
             trainer = pl.Trainer(
                 **hparams[prefix].pl_trainer,
                 checkpoint_callback=checkpoint_callback,
                 callbacks=callbacks,
-                filepath=f"{hparams['path_model']}/{prefix}S{seed}F{fold}.pth",
+                # filepath=f"{hparams['path_model']}/{prefix}S{seed}F{fold}.pth",
+                # weights_save_path=f"{hparams['path_model']}",
                 # logger=instantiate(cfg.logger, name=f'test/{experiment_name}'),
-                # weights_summary='full',
+                weights_summary='full' if (iseed==0 and fold==0) else None,
             )
-            trainer.fit(pl_module, data_module)
-
-            oof_ = np.zeros((len(train), len(target_cols)))
-            best_loss = np.inf
-
-            oof_[val_idx] = inference(pl_module.model,
-                                      data_module.val_dataloader(),
-                                      batch_size=hparams[prefix].dataloader.batch_size
-                                      )
-
+            trainer.fit(model=pl_module, datamodule=data_module)
+            torch.save(trainer.get_model().model.state_dict(), f"{hparams['path_model']}/{prefix}S{seed}F{fold}.pth")
             gc.collect()
 
-            if verbose:
-                print('')
-            log.debug('')
-
         # --------------------- PREDICTION---------------------
-        testdataset = MoADatasetDual(test[feature_cols].values)
-        testloader = torch.utils.data.DataLoader(testdataset, batch_size=hparams.datamodule.batch_size,
+        if not hparams[prefix].two_head:
+            test_dataset = MoADatasetSingle(test[feature_cols].values)
+        else:
+            test_dataset = MoADatasetDual(test[feature_cols].values)
+
+        test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=hparams[prefix].batch_size,
                                                  num_workers=hparams.datamodule.num_workers, shuffle=False)
+        model = instantiate(hparams[prefix].model,
+                            **num_features_targets,
+                            loss_tr=instantiate(hparams[prefix].loss_tr),
+                            loss_vl=instantiate(hparams[prefix].loss_vl),
+                            )
 
-        model = NetTwoHead(
-            n_in=len(feature_cols),
-            n_h=hparams.model.hidden_size,
-            n_out=len(target_cols),
-            n_out1=train_targets_nonscored.shape[1],
-            loss=nn.BCEWithLogitsLoss(),
-            rloss=SmoothBCEwLogits(smoothing=0.001)
-        )
-
-        model.load_state_dict(torch.load(f"{hparams['path_model']}/{prefix}S{seed}FOLD{fold}.pth",
+        model.load_state_dict(torch.load(f"{hparams['path_model']}/{prefix}S{seed}F{fold}.pth",
                                          map_location=torch.device(hparams['device'])
                                          ))
+        model.to('cpu')
+        oof_[val_idx] = inference(model,
+                                  data_module.val_dataloader(),
+                                  batch_size=hparams[prefix].batch_size,
+                                  )
 
-        model.to(hparams['device'])
-
-        pred_ = inference_fn_dual(model, testloader, hparams['device'])
+        pred_ = inference(model, test_loader, batch_size=hparams[prefix].batch_size)
         del model
         gc.collect()
-
-        if not pretrain_model:
-            oof += oof_
-        predictions += pred_ / nfolds
+        oof += oof_
+        predictions += pred_ / hparams[prefix].nfolds
 
     gc.collect()
-    if not pretrain_model:
-        return oof, predictions
-    else:
-        return predictions
+    return oof, predictions
 
 
 # def run_k_fold_nn_two_head
