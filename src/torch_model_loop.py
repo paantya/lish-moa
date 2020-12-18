@@ -429,7 +429,6 @@ def run_k_fold_trainer(data_dict, hparams, cv, seed, iseed, prefix='t1', pretrai
                                   )
         # TODO local check score
         # oof_[val_idx] target[target_cols].iloc[val_idx].values
-        log.info()
         pred_ = inference(model, test_loader, batch_size=hparams[prefix].batch_size)
         del model
         gc.collect()
