@@ -46,20 +46,20 @@ def run(cfg: DictConfig) -> None:
     path_model = f'{local_path}models'
     cfg['path_model'] = path_model
     # print(os.listdir(f'{local_path}../'))
-
-    ######################################
-    # data_load and preprocess
-    ######################################
-
     pretrain_model = False
+
+    ######################################
+    # data_load and preprocess (загрузка и подготовка данных PCA, VT)
+    ######################################
+
     data_dict = load_and_preprocess_data_index(cfg, path, pca_append_test=True, variancethreshold_append_test=False, verbose=1)
 
     ######################################
     # cv
     ######################################
     # CV = MultilabelStratifiedKFold(n_splits=cfg.model.nfolds, random_state=42)
-    # CV = MultilabelStratifiedKFold(n_splits=cfg.model.nfolds, random_state=42)
     CV = DrugAwareMultilabelStratifiedKFold(n_splits=cfg.model.nfolds, shuffle=False, random_state=42)
+
     ##################################################
     # Train
     ##################################################
@@ -111,7 +111,7 @@ def run(cfg: DictConfig) -> None:
 
     y_true = train_targets_scored[target_cols].values
     valid_results = train_targets_scored.drop(columns=target_cols).merge(train[target_cols],
-                                                                     on='sig_id', how='left').fillna(0)
+                                                                         on='sig_id', how='left').fillna(0)
     y_pred = valid_results[target_cols].values
 
     score = 0
@@ -121,13 +121,8 @@ def run(cfg: DictConfig) -> None:
 
     print(f"CV log_loss: {score}")
     log.info(f"CV log_loss: {score}")
-    log.info(f"y_true.shape: {y_true.shape}")
     log.info(f"y_pred.shape: {y_pred.shape}")
-
-    # sub = sample_submission.drop(columns=target_cols).merge(test[['sig_id'] + target_cols], on='sig_id',
-    #                                                         how='left').fillna(0)
-    # sub.to_csv('submission.csv', index=False)
-    # log.info(f"sub.shape: {sub.shape}")
+    log.info(f"y_true.shape: {y_true.shape}")
 
     res = test[target_cols]
     corner_case = test_features[test_features['cp_type'] == 'ctl_vehicle']

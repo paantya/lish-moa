@@ -301,16 +301,21 @@ def run_k_fold_trainer(data_dict, hparams, cv, seed, iseed, prefix='t1', pretrai
                                                    leave=False)):
 
         oof_ = np.zeros((len(train), len(target_cols)))
+        # подготовка данных для обучения
         train_valid_data = {
             'train_data': train[feature_cols].iloc[trn_idx].values,
             'train_targets': target[target_cols].iloc[trn_idx].values,
             'valid_data': train[feature_cols].iloc[val_idx].values,
             'valid_targets': target[target_cols].iloc[val_idx].values,
         }
+
+        # подготовка Параметров модели для обучения
         num_features_targets = {
             'num_features': len(feature_cols),
             'num_targets': len(target_cols),
         }
+
+        # ДОбавление под параметров, в случае двухголовой модели
         if hparams[prefix].two_head:
             train_valid_data['train_targets1'] = train_targets_nonscored[train_targets_nonscored.columns].iloc[
                 trn_idx].values
@@ -327,25 +332,30 @@ def run_k_fold_trainer(data_dict, hparams, cv, seed, iseed, prefix='t1', pretrai
 
         if hparams.scheduler._target_.split('.')[-1] == 'OneCycleLR':
             hparams.scheduler['epochs'] = int(hparams[prefix].pl_trainer.min_epochs)
-            # print(f"steps_per_epoch: {int(ceil(len(trn_idx)/hparams[prefix].batch_size))}")
-            # log.info(f"steps_per_epoch: {int(ceil(len(trn_idx)/hparams[prefix].batch_size))}")
             hparams.scheduler['steps_per_epoch'] = int(ceil(len(trn_idx)/hparams[prefix].batch_size))
         if not pretrain_model:
+            # Инициализация модели
             model = instantiate(hparams[prefix].model,
                                 **num_features_targets,
                                 loss_tr=instantiate(hparams[prefix].loss_tr),
                                 loss_vl=instantiate(hparams[prefix].loss_vl),
                                 )
+
+            # Инициализация PL_модуля
             pl_module = instantiate(hparams[prefix].pl_modul,
                                     hparams=hparams,
                                     prefix=prefix,
                                     model=model,
                                     )
+
+            # Проверка работоспособности в один проход
             pl.Trainer(
                 **hparams[prefix].pl_trainer,
-                fast_dev_run=True,
+                fast_dev_run=True if (iseed==0 and fold==0) else None,
                 weights_summary=None,
             ).tune(model=pl_module, datamodule=data_module)
+
+            # Подбор размера батча
             if hparams['device'] != 'cpu':
                 hparams[prefix].pl_trainer['gpus'] = 1
             if hparams[prefix].pl_trainer.gpus > 0 and hparams[prefix].batch_size in ['auto', 'power', 'binsearch']:
@@ -356,23 +366,36 @@ def run_k_fold_trainer(data_dict, hparams, cv, seed, iseed, prefix='t1', pretrai
                     auto_scale_batch_size=hparams[prefix].batch_size,
                     weights_summary=None,
                 ).tune(model=pl_module, datamodule=data_module)
+
+            # Подбор lr
             if hparams[prefix].lr == 'auto':
                 pl.Trainer(
                     **hparams[prefix].pl_trainer,
                     auto_lr_find=True,
                     weights_summary=None,
                 ).tune(model=pl_module, datamodule=data_module)
+
+            # Инициализация сохранения topk моделей, пока отключено
             checkpoint_callback = instantiate(hparams.modelcheckpoint,
                                               filepath=f"{hparams['path_model']}/{prefix}S{seed}F{fold}",
                                               # filename=f"{prefix}S{seed}F{fold}",
                                               # dirpath=f"{hparams['path_model']}",
                                               )
-            callbacks = [instantiate(hparams.earlystopping)]
 
+            # Инициализация ранней остановки
+            callbacks = [instantiate(hparams.earlystopping)]
+            # Инициализация гера
+            logger = instantiate(hparams.logger,
+                                 name=f"{hparams.scheduler._target_.split('.')[-1]}/{hparams[prefix].model._target_.split('.')[-1]}",
+                                 version=f"{prefix}S{seed}F{fold}"
+                                 )
+
+            # Инициализация рабочего pl тренера
             trainer = pl.Trainer(
                 **hparams[prefix].pl_trainer,
                 checkpoint_callback=checkpoint_callback,
                 callbacks=callbacks,
+                logger=logger,
                 # filepath=f"{hparams['path_model']}/{prefix}S{seed}F{fold}.pth",
                 # weights_save_path=f"{hparams['path_model']}",
                 # logger=instantiate(cfg.logger, name=f'test/{experiment_name}'),
@@ -404,7 +427,9 @@ def run_k_fold_trainer(data_dict, hparams, cv, seed, iseed, prefix='t1', pretrai
                                   data_module.val_dataloader(),
                                   batch_size=hparams[prefix].batch_size,
                                   )
-
+        # TODO local check score
+        # oof_[val_idx] target[target_cols].iloc[val_idx].values
+        log.info()
         pred_ = inference(model, test_loader, batch_size=hparams[prefix].batch_size)
         del model
         gc.collect()

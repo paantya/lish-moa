@@ -83,7 +83,7 @@ class LitMoANet(pl.LightningModule):
         self.log('loss/train', loss, logger=True, on_step=True, on_epoch=False, prog_bar=True)
         self.log('_rloss/train', real_loss, logger=True, on_step=True, on_epoch=False, prog_bar=True)
         self.log('epoch/lr', self.optimizer.param_groups[0]['lr'], logger=True, on_step=True, on_epoch=False,  prog_bar=True)
-        self.log('epoch/lr_tr', self.trainer.lr_schedulers[0].optimizer.param_groups()[0].get('lr'), logger=True, on_step=True, on_epoch=False,  prog_bar=True)
+        # self.log('epoch/lr_tr', self.trainer.lr_schedulers[0].optimizer.param_groups()[0].get('lr'), logger=True, on_step=True, on_epoch=False,  prog_bar=True)
 
 
         return {
