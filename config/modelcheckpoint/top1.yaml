@@ -1,8 +1,8 @@
 # @package _group_
 _target_: pytorch_lightning.callbacks.ModelCheckpoint
-save_top_k: 1
+save_top_k: 0
 verbose: false
 save_weights_only: true
-monitor: valid_loss
+monitor: loss/valid
 mode: min
 prefix: ''

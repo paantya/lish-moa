@@ -1,6 +1,7 @@
 
-import torch
+import gc
 import os
+import torch
 import inspect
 import logging
 import numpy as np
@@ -10,13 +11,14 @@ import torch.optim as optim
 import pytorch_lightning as pl
 from tqdm.auto import tqdm
 
+from math import ceil
+
 from src.loss.loss import SmoothBCEwLogits
 from src.models.base import Model, NetTwoHead
 from src.datasets.base import MoADataset, TestDataset
 from src.datasets.single import MoADatasetSingle
 from src.datasets.dual import MoADatasetDual
 from src.data.process_data import preprocess_data, set_seed
-import gc
 
 
 from hydra.utils import instantiate
@@ -321,6 +323,13 @@ def run_k_fold_trainer(data_dict, hparams, cv, seed, iseed, prefix='t1', pretrai
                                   num_workers=hparams.datamodule.num_workers,
                                   shuffle=True,
                                   )
+
+
+        if hparams.scheduler._target_.split('.')[-1] == 'OneCycleLR':
+            hparams.scheduler['epochs'] = int(hparams[prefix].pl_trainer.min_epochs)
+            # print(f"steps_per_epoch: {int(ceil(len(trn_idx)/hparams[prefix].batch_size))}")
+            # log.info(f"steps_per_epoch: {int(ceil(len(trn_idx)/hparams[prefix].batch_size))}")
+            hparams.scheduler['steps_per_epoch'] = int(ceil(len(trn_idx)/hparams[prefix].batch_size))
         if not pretrain_model:
             model = instantiate(hparams[prefix].model,
                                 **num_features_targets,
@@ -590,6 +599,7 @@ def run_k_fold_nn(data_dict, hparams, cv, seed=42, file_prefix='m1', pretrain_mo
 
             optimizer = torch.optim.Adam(model.parameters(), lr=hparams.model.lr,
                                          weight_decay=hparams.model.weight_decay)
+            print(f"steps_per_epoch=len(trainloader): {len(trainloader)}")
             scheduler = optim.lr_scheduler.OneCycleLR(optimizer=optimizer, pct_start=0.1, div_factor=1e3,
                                                       max_lr=1e-2, epochs=hparams.model.epochs,
                                                       steps_per_epoch=len(trainloader))

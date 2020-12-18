@@ -69,21 +69,21 @@ def run(cfg: DictConfig) -> None:
         return_run_k_fold = run_k_fold_nn(data_dict, cfg, cv=CV, seed=seed, file_prefix='h1', pretrain_model=pretrain_model, verbose=verbose)
         if not pretrain_model:
             oof_, predictions_ = return_run_k_fold
-            oof += oof_ / cfg.model.nseed / 2
+            oof += oof_ / cfg.model.nseed
         else:
             predictions_ = return_run_k_fold
-        predictions += predictions_ / cfg.model.nseed / 2
+        predictions += predictions_ / cfg.model.nseed
         gc.collect()
 
 
-        return_run_k_fold = run_k_fold_nn_two_head(data_dict, cfg, cv=CV, seed=seed, file_prefix='m1', pretrain_model=pretrain_model, verbose=verbose)
-        if not pretrain_model:
-            oof_, predictions_ = return_run_k_fold
-            oof += oof_ / cfg.model.nseed / 2
-        else:
-            predictions_ = return_run_k_fold
-        predictions += predictions_ / cfg.model.nseed / 2
-        gc.collect()
+        # return_run_k_fold = run_k_fold_nn_two_head(data_dict, cfg, cv=CV, seed=seed, file_prefix='m1', pretrain_model=pretrain_model, verbose=verbose)
+        # if not pretrain_model:
+        #     oof_, predictions_ = return_run_k_fold
+        #     oof += oof_ / cfg.model.nseed / 2
+        # else:
+        #     predictions_ = return_run_k_fold
+        # predictions += predictions_ / cfg.model.nseed / 2
+        # gc.collect()
 
 
 

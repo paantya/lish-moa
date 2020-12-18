@@ -73,43 +73,44 @@ class LitMoANet(pl.LightningModule):
         self.optimizer = self.get_optimizer()
         self.scheduler = self.get_scheduler(self.optimizer)
 
-        return [self.optimizer], [{'scheduler': self.scheduler, 'interval': 'epoch', 'monitor': 'valid_loss'}]
+        return [self.optimizer], [{'scheduler': self.scheduler, 'interval': 'epoch', 'monitor': 'loss/valid'}]
 
     def training_step(
             self, batch: torch.Tensor, batch_idx: int
     ):
         out, loss, real_loss = self(**batch)
         # real_loss = self.loss_vl(out0, target)
-        self.log('train_loss', loss, logger=True, on_epoch=True, prog_bar=True)
-        self.log('real_train_loss', real_loss, logger=True, on_epoch=True, prog_bar=True)
-        self.log('lr', self.optimizer.param_groups[0]['lr'], logger=True, prog_bar=True)
+        self.log('loss/train', loss, logger=True, on_step=True, on_epoch=False, prog_bar=True)
+        self.log('_rloss/train', real_loss, logger=True, on_step=True, on_epoch=False, prog_bar=True)
+        self.log('epoch/lr', self.optimizer.param_groups[0]['lr'], logger=True, on_step=True, on_epoch=False,  prog_bar=True)
+        self.log('epoch/lr_tr', self.trainer.lr_schedulers[0].optimizer.param_groups()[0].get('lr'), logger=True, on_step=True, on_epoch=False,  prog_bar=True)
+
+
         return {
             'loss': loss,
         }
 
-    # def training_epoch_end(self, outputs):
-    #     avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
-    #     real_avg_loss = torch.stack([x['real_train_loss'] for x in outputs]).mean()
+    # def training_epoch_end(self, training_step_outputs):
+    #     avg_loss = torch.stack([x['loss'] for x in training_step_outputs]).mean()
+    #     real_avg_loss = torch.stack([x['real_train_loss'] for x in training_step_outputs]).mean()
     #     logs = {'train_loss': avg_loss, 'real_train_loss': real_avg_loss}
-    #     return {'log': logs, 'progress_bar': logs}
+    #
+    #     self.log('epoch/lr', self.optimizer.param_groups[0]['lr'], logger=True, on_step=False, on_epoch=True, prog_bar=True)
 
     def validation_step(
             self, batch: torch.Tensor, batch_idx: int
     ):
         out, loss, real_loss = self(**batch)
-        self.log('valid_loss', loss, logger=True, on_epoch=True, prog_bar=True)
-        self.log('real_valid_loss', real_loss, logger=True, on_epoch=True, prog_bar=True)
+        self.log('loss/valid', loss, logger=True, on_step=False, on_epoch=True, prog_bar=True)
+        self.log('_rloss/valid', real_loss, logger=True, on_step=False, on_epoch=True, prog_bar=True)
+
         # self.log('lr', self.optimizer.get_last_lr(), logger=True, on_epoch=True, prog_bar=True)
         return {
             'loss': loss
         }
 
-    # def validation_epoch_end(self, outputs):
-    #     avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
-    #     real_avg_loss = torch.stack([x['real_valid_loss'] for x in outputs]).mean()
-    #
-    #     logs = {'valid_loss': avg_loss, 'real_valid_loss': real_avg_loss}
-    #     return {'valid_loss': avg_loss, 'log': logs, 'progress_bar': logs}
+    # def validation_epoch_end(self, validation_step_outputs):
+    #     self.log('epoch/lr', self.optimizer.param_groups[0]['lr'], logger=True, prog_bar=True)
 
 #
 # class LishMoaPL(pl.LightningModule):

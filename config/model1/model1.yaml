@@ -4,7 +4,7 @@ batch_size: 128
 lr: auto
 nfolds: 7
 model:
-  _target_: src.models.base.Model
+  _target_: src.models.base.Model_zero
   hidden_size: 1500
   dropout: 0.25
   two_head_factor: null
@@ -26,6 +26,6 @@ dataset:
 pl_trainer:
   gpus: 0
   default_root_dir: '../models/'
-  max_epochs: 100
-  min_epochs: 10
+  max_epochs: 50
+  min_epochs: 20
   gradient_clip_val: 0.5

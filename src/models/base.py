@@ -44,7 +44,7 @@ class Model_wn(nn.Module):
 
 # model and SmoothingLoss
 class Model(nn.Module):
-    def __init__(self, num_features, num_targets, hidden_size, loss_tr, loss_vl, dropout=0.2, two_head_factor=None):
+    def __init__(self, num_features, num_targets, hidden_size, loss_tr=None, loss_vl=None, dropout=0.2, two_head_factor=None):
         super(Model, self).__init__()
 
         self.num_features = num_features
@@ -57,6 +57,49 @@ class Model(nn.Module):
         self.sigm = nn.Sigmoid()
 
         self.batch_norm1 = nn.BatchNorm1d(num_features)
+        self.dropout1 = nn.Dropout(dropout)
+        self.dense1 = nn.Linear(num_features, hidden_size)
+
+        self.batch_norm2 = nn.BatchNorm1d(hidden_size)
+        self.dropout2 = nn.Dropout(dropout)
+        self.dense2 = nn.Linear(hidden_size, hidden_size)
+        # Model
+        self.batch_norm3 = nn.BatchNorm1d(hidden_size)
+        self.dropout3 = nn.Dropout(dropout)
+        self.dense3 = nn.Linear(hidden_size, num_targets)
+
+    def forward(self, x):
+        x = self.batch_norm1(x)
+        x = F.leaky_relu(self.dense1(x))
+        x = self.dropout1(x)
+
+        x = self.batch_norm2(x)
+        x = F.leaky_relu(self.dense2(x))
+        x = self.dropout2(x)
+
+        x = self.batch_norm3(x)
+        x = self.dense3(x)
+        x = self.dropout3(x)
+
+        return x
+
+
+# model and SmoothingLoss
+class Model_zero(nn.Module):
+    def __init__(self, num_features, num_targets, hidden_size, loss_tr, loss_vl, dropout=0.2, two_head_factor=None):
+        super(Model_zero, self).__init__()
+
+        self.num_features = num_features
+        self.num_targets = num_targets
+        self.hidden_size = hidden_size
+        self.loss_tr = loss_tr
+        self.loss_vl = loss_vl
+        self.dropout = dropout
+
+        self.sigm = nn.Sigmoid()
+
+        self.batch_norm1 = nn.BatchNorm1d(num_features)
+        self.dropout1 = nn.Dropout(dropout)
         self.dense1 = nn.Linear(num_features, hidden_size)
 
         self.batch_norm2 = nn.BatchNorm1d(hidden_size)
@@ -70,19 +113,20 @@ class Model(nn.Module):
     def forward(self, x, y):
         x = self.batch_norm1(x)
         x = F.leaky_relu(self.dense1(x))
+        x = self.dropout1(x)
 
         x = self.batch_norm2(x)
-        x = self.dropout2(x)
         x = F.leaky_relu(self.dense2(x))
+        x = self.dropout2(x)
 
         x = self.batch_norm3(x)
-        x = self.dropout3(x)
         x = self.dense3(x)
+        x = self.dropout3(x)
 
-        x = self.sigm(x)
+        out = self.sigm(x)
         loss = self.loss_tr(x, y)
-        loss_real = self.loss_tr(x, y)
-        return x, loss, loss_real
+        loss_real = self.loss_vl(x, y)
+        return out, loss, loss_real
 
 
 class NetTwoHead(nn.Module):

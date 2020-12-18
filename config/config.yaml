@@ -4,7 +4,7 @@ defaults:
   - pl: gpu100
   - datamodule: gpu
   - quantile_transformer: normal
-  - scheduler: reduceLROnPlateau
+  - scheduler: oneCycleLR
   - earlystopping: 10
   - modelcheckpoint: top1
 #  - hydra/sweeper: ax
