@@ -168,7 +168,7 @@ def inference_fn(model, dataloader, device, batch_size=128):
     gc.collect()
     return preds
 
-# run train one model
+# run train one mode
 def run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, num_features, num_targets, target,
                  verbose=False):
 
@@ -270,7 +270,7 @@ def run_training(fold, seed, hparams, folds, test, feature_cols, target_cols, nu
     predictions = inference_fn(model, testloader, hparams['device'])
     del model
     gc.collect()
-    if hparams.model.train_models:
+    if hparams.mode.train_models:
         return oof, predictions
     else:
 
@@ -333,6 +333,7 @@ def run_k_fold_trainer(data_dict, hparams, cv, seed, iseed, prefix='t1', pretrai
         if hparams.scheduler._target_.split('.')[-1] == 'OneCycleLR':
             hparams.scheduler['epochs'] = int(hparams[prefix].pl_trainer.min_epochs)
             hparams.scheduler['steps_per_epoch'] = int(ceil(len(trn_idx)/hparams[prefix].batch_size))
+            # hparams.scheduler['steps_per_epoch'] = int(2)
         if not pretrain_model:
             # Инициализация модели
             model = instantiate(hparams[prefix].model,
@@ -349,11 +350,12 @@ def run_k_fold_trainer(data_dict, hparams, cv, seed, iseed, prefix='t1', pretrai
                                     )
 
             # Проверка работоспособности в один проход
-            pl.Trainer(
-                **hparams[prefix].pl_trainer,
-                fast_dev_run=True if (iseed==0 and fold==0) else None,
-                weights_summary=None,
-            ).tune(model=pl_module, datamodule=data_module)
+            if (iseed == 0 and fold == 0):
+                pl.Trainer(
+                    **hparams[prefix].pl_trainer,
+                    fast_dev_run=True if (iseed==0 and fold==0) else None,
+                    weights_summary=None,
+                ).tune(model=pl_module, datamodule=data_module)
 
             # Подбор размера батча
             if hparams['device'] != 'cpu':
@@ -398,7 +400,7 @@ def run_k_fold_trainer(data_dict, hparams, cv, seed, iseed, prefix='t1', pretrai
                 logger=logger,
                 # filepath=f"{hparams['path_model']}/{prefix}S{seed}F{fold}.pth",
                 # weights_save_path=f"{hparams['path_model']}",
-                # logger=instantiate(cfg.logger, name=f'test/{experiment_name}'),
+                # logger=instantiate(cfg.logger, name=f'test/{}'),
                 weights_summary='full' if (iseed==0 and fold==0) else None,
             )
             trainer.fit(model=pl_module, datamodule=data_module)
@@ -459,13 +461,13 @@ def run_k_fold_nn_two_head(data_dict, hparams, cv, seed=42, file_prefix='m1', pr
 
     total_loss = 0
     # for fold, (trn_idx, val_idx) in enumerate(tqdm(cv.split(X=train, y=target),
-    #                                                f'run {hparams.model.nfolds} folds',
-    #                                                total=hparams.model.nfolds,
+    #                                                f'run {hparams.mode.nfolds} folds',
+    #                                                total=hparams.mode.nfolds,
     #                                                leave=False)):
     # for fold, (_, val) in enumerate(cv.split(X=train_features, y=train_targets_scored)):
     for fold, (trn_idx, val_idx) in enumerate(tqdm(cv.split(X=train[feature_cols+['drug_id']], y=train[target_cols]),
-                                                   f'run {hparams.model.nfolds} folds',
-                                                   total=hparams.model.nfolds,
+                                                   f'run {hparams.mode.nfolds} folds',
+                                                   total=hparams.mode.nfolds,
                                                    leave=False)):
         if not pretrain_model:
             X_train, y_train = train[feature_cols].iloc[trn_idx].values, target[target_cols].iloc[trn_idx].values
@@ -594,8 +596,8 @@ def run_k_fold_nn(data_dict, hparams, cv, seed=42, file_prefix='m1', pretrain_mo
 
     total_loss = 0
     # for fold, (trn_idx, val_idx) in enumerate(tqdm(cv.split(X=train, y=target),
-    #                                                f'run {hparams.model.nfolds} folds',
-    #                                                total=hparams.model.nfolds,
+    #                                                f'run {hparams.mode.nfolds} folds',
+    #                                                total=hparams.mode.nfolds,
     #                                                leave=False)):
     # for fold, (_, val) in enumerate(cv.split(X=train_features, y=train_targets_scored)):
     for fold, (trn_idx, val_idx) in enumerate(tqdm(cv.split(X=train[feature_cols+['drug_id']], y=train[target_cols]),

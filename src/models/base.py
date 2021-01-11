@@ -6,7 +6,7 @@ from src.layer.recalibrate import recalibrate_layer
 
 
 
-# model and SmoothingLoss
+# mode and SmoothingLoss
 class Model_wn(nn.Module):
     def __init__(self, num_features, num_targets, hidden_size, dropout=0.2):
         super(Model_wn, self).__init__()
@@ -42,7 +42,7 @@ class Model_wn(nn.Module):
         return x
 
 
-# model and SmoothingLoss
+# mode and SmoothingLoss
 class Model(nn.Module):
     def __init__(self, num_features, num_targets, hidden_size, loss_tr=None, loss_vl=None, dropout=0.2, two_head_factor=None):
         super(Model, self).__init__()
@@ -84,7 +84,7 @@ class Model(nn.Module):
         return x
 
 
-# model and SmoothingLoss
+# mode and SmoothingLoss
 class Model_zero(nn.Module):
     def __init__(self, num_features, num_targets, hidden_size, loss_tr, loss_vl, dropout=0.2, two_head_factor=None):
         super(Model_zero, self).__init__()

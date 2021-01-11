@@ -57,8 +57,8 @@ def run(cfg: DictConfig) -> None:
     ######################################
     # cv
     ######################################
-    # CV = MultilabelStratifiedKFold(n_splits=cfg.model.nfolds, random_state=42)
-    # CV = MultilabelStratifiedKFold(n_splits=cfg.model.nfolds, random_state=42)
+    # CV = MultilabelStratifiedKFold(n_splits=cfg.mode.nfolds, random_state=42)
+    # CV = MultilabelStratifiedKFold(n_splits=cfg.mode.nfolds, random_state=42)
     CV = DrugAwareMultilabelStratifiedKFold(n_splits=cfg.model.nfolds, shuffle=False, random_state=42)
     ##################################################
     # Train
@@ -79,10 +79,10 @@ def run(cfg: DictConfig) -> None:
         # return_run_k_fold = run_k_fold_nn_two_head(data_dict, cfg, cv=CV, seed=seed, file_prefix='m1', pretrain_model=pretrain_model, verbose=verbose)
         # if not pretrain_model:
         #     oof_, predictions_ = return_run_k_fold
-        #     oof += oof_ / cfg.model.nseed / 2
+        #     oof += oof_ / cfg.mode.nseed / 2
         # else:
         #     predictions_ = return_run_k_fold
-        # predictions += predictions_ / cfg.model.nseed / 2
+        # predictions += predictions_ / cfg.mode.nseed / 2
         # gc.collect()
 
 

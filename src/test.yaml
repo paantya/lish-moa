@@ -17,7 +17,7 @@ model:
 pl:
   _target_: pytorch_lightning.Trainer
   gpus: 1
-  default_root_dir: ../model/
+  default_root_dir: ../mode/
   max_epochs: 100
   min_epochs: 5
   log_gpu_memory: all

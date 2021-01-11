@@ -70,8 +70,8 @@ def run():
     ######################################
     # cv
     ######################################
-    # CV = MultilabelStratifiedKFold(n_splits=cfg.model.nfolds, random_state=42)
-    # CV = MultilabelStratifiedKFold(n_splits=cfg.model.nfolds, random_state=42)
+    # CV = MultilabelStratifiedKFold(n_splits=cfg.mode.nfolds, random_state=42)
+    # CV = MultilabelStratifiedKFold(n_splits=cfg.mode.nfolds, random_state=42)
     CV = DrugAwareMultilabelStratifiedKFold(n_splits=cfg.model.nfolds, shuffle=False, random_state=42)
     ##################################################
     # Train

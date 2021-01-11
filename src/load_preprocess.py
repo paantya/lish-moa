@@ -51,8 +51,8 @@ def load_and_preprocess_data_index(cfg, path, pca_append_test=False, variancethr
     sample_submission = pd.read_csv(f'{path}/sample_submission.csv')
     # sub = pd.read_csv(f'{path}/sample_submission.csv')
 
-    log.info(f"n_comp_genes: {cfg.model.n_comp_genes}, n_comp_cells: {cfg.model.n_comp_cells}, total: "
-             f"{cfg.model.n_comp_genes + cfg.model.n_comp_cells}.")
+    log.info(f"n_comp_genes: {cfg.pca.n_comp_genes}, n_comp_cells: {cfg.pca.n_comp_cells}, total: "
+             f"{cfg.pca.n_comp_genes + cfg.pca.n_comp_cells}.")
 
     GENES = [col for col in train_features.columns if col.startswith('g-')]
     CELLS = [col for col in train_features.columns if col.startswith('c-')]
@@ -75,7 +75,7 @@ def load_and_preprocess_data_index(cfg, path, pca_append_test=False, variancethr
     ##################################################
 
     train_features_return, test_features_return = \
-        get_pca_transform(train_features, test_features, features=GENES, n_components=cfg.model.n_comp_genes,
+        get_pca_transform(train_features, test_features, features=GENES, n_components=cfg.pca.n_comp_genes,
                           flag='g', append_test=pca_append_test)
     train_features = pd.concat((train_features, train_features_return), axis=1)
     test_features = pd.concat((test_features, test_features_return), axis=1)
@@ -84,7 +84,7 @@ def load_and_preprocess_data_index(cfg, path, pca_append_test=False, variancethr
 
 
     train_features_return, test_features_return = \
-        get_pca_transform(train_features, test_features, features=CELLS, n_components=cfg.model.n_comp_cells,
+        get_pca_transform(train_features, test_features, features=CELLS, n_components=cfg.pca.n_comp_cells,
                           flag='c', append_test=pca_append_test)
     train_features = pd.concat((train_features, train_features_return), axis=1)
     test_features = pd.concat((test_features, test_features_return), axis=1)
@@ -95,7 +95,7 @@ def load_and_preprocess_data_index(cfg, path, pca_append_test=False, variancethr
     ##################################################
     train_features_return, test_features_return = \
         split_with_variancethreshold(train_features, test_features,
-                                     variance_threshold_for_fs=cfg.model.variance_threshold_for_fs,
+                                     variance_threshold_for_fs=cfg.variance_threshold.variance_threshold_for_fs,
                                      # categorical=['sig_id', 'cp_type', 'cp_time', 'cp_dose', 'drug_id'],
                                      categorical=['cp_type', 'cp_time', 'cp_dose'],
                                      append_test=variancethreshold_append_test)
@@ -133,7 +133,7 @@ def load_and_preprocess_data_index(cfg, path, pca_append_test=False, variancethr
     # cv folds
     ##################################################
     # folds = train.copy()
-    # mskf = MultilabelStratifiedKFold(n_splits=cfg.model.nfolds, random_state=cfg['list_seed'][0])
+    # mskf = MultilabelStratifiedKFold(n_splits=cfg.mode.nfolds, random_state=cfg['list_seed'][0])
     #
     # for f, (t_idx, v_idx) in enumerate(mskf.split(X=train, y=target)):
     #     folds.loc[v_idx, 'kfold'] = int(f)
@@ -150,7 +150,7 @@ def load_and_preprocess_data_index(cfg, path, pca_append_test=False, variancethr
     ##################################################
     # Preprocessing feature_cols
     ##################################################
-    feature_cols = [c for c in preprocess_data(train, cfg.model.patch1).columns if c not in target_cols]
+    feature_cols = [c for c in preprocess_data(train, cfg.mode.patch1).columns if c not in target_cols]
     feature_cols = [c for c in feature_cols if c not in ['kfold', 'sig_id', 'drug_id']]
     num_features = len(feature_cols)
     num_targets = len(target_cols)

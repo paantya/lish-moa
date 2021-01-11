@@ -55,14 +55,14 @@ def get_xgboost_cv(train, targets, test, sub, NFOLDS=7):
         # print(f"y.shape: {y.shape}")
 
 
-        # model = xgb.cv(
+        # mode = xgb.cv(
         #     params=params,
         #     dtrain=trainDM,
         #     folds=cv,
         #     # num_boost_round=500,
         #     early_stopping_rounds=10,
         # )
-        # model.predict(testDM)
+        # mode.predict(testDM)
 
         for fn, (trn_idx, val_idx) in enumerate(CV):
             print('Fold: ', fn + 1)
@@ -102,7 +102,7 @@ def get_xgboost_cv(train, targets, test, sub, NFOLDS=7):
             submission[column] += predictions / NFOLDS
 
             # for score in ['weight', 'gain', 'cover', 'total_gain', 'total_cover']:
-            #     importance = model.get_score(importance_type=score).items()
+            #     importance = mode.get_score(importance_type=score).items()
             #     if len(importance) > 0:
             #         print(f"importance ({score}): {importance}")
 

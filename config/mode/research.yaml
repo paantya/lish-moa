@@ -1,0 +1,9 @@
+# @package _group_
+nfolds: 7
+nseed : 1
+
+# Version
+v: 0
+# Our Patches
+patch1: 0
+train_models: 1

@@ -1,12 +1,15 @@
 defaults:
-  - model: train
+  - mode: train
   - model1: model1
   - pl: gpu100
   - datamodule: gpu
   - quantile_transformer: normal
   - scheduler: oneCycleLR
+  - logger: tensorboardlogger
   - earlystopping: 10
   - modelcheckpoint: top1
+  - pca: pca_base
+  - variance_threshold: variancethreshold_base
 #  - hydra/sweeper: ax
 hydra:
   run:

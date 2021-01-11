@@ -34,7 +34,7 @@ class LitMoANet(pl.LightningModule):
         self.lr = 0.1 if self.hparams[self.prefix].lr == 'auto' else self.hparams[self.prefix].lr
         self.batch_size = 128 if self.hparams[self.prefix].batch_size in ['auto', 'power', 'binsearch'] else self.hparams[self.prefix].batch_size
 
-        # self.example_input_array = torch.zeros(self.batch_size, self.model.input_height)  # optional
+        # self.example_input_array = torch.zeros(self.batch_size, self.mode.input_height)  # optional
         if not self.hparams[self.prefix].two_head:
             self.example_input_array = {
                 'x': torch.zeros(self.batch_size, self.model.num_features),
@@ -114,15 +114,15 @@ class LitMoANet(pl.LightningModule):
 
 #
 # class LishMoaPL(pl.LightningModule):
-#     def __init__(self, hparams, model, dual=False):
+#     def __init__(self, hparams, mode, dual=False):
 #         super().__init__()
 #         self.hparams = hparams
-#         self.net = model
+#         self.net = mode
 #         self.dual = dual
 #         self.lr = 0.1 if self.hparams.lr == 'auto' else self.hparams.lr
 #         self.batch_size = 128 if self.hparams.batch_size in ['auto', 'power', 'binsearch'] else self.hparams.batch_size
 #
-#         self.example_input_array = torch.zeros(self.batch_size, self.hparams.model.input_height)  # optional
+#         self.example_input_array = torch.zeros(self.batch_size, self.hparams.mode.input_height)  # optional
 #
 #         self.criterion = self.get_criterion()
 #
@@ -142,7 +142,7 @@ class LitMoANet(pl.LightningModule):
 #         self.log('_loss/train', loss, logger=True)
 #         return loss
 #
-#     def show_img(self, model, n=10, title="run", loss=0):
+#     def show_img(self, mode, n=10, title="run", loss=0):
 #         transform = torchvision.transforms.Compose(
 #             [instantiate(trnsfrm) for trnsfrm in self.hparams.transform.transforms[:2]])
 #         dataset = instantiate(self.hparams.dataset, train=False, transform=transform)
@@ -155,7 +155,7 @@ class LitMoANet(pl.LightningModule):
 #             plt.figure(figsize=(n, 3))
 #             plt.axis('off')
 #
-#             y_hot = model.decoder(model.encoder(torch.reshape(images[:n], shape=(-1, 1, 1, 784))))
+#             y_hot = mode.decoder(mode.encoder(torch.reshape(images[:n], shape=(-1, 1, 1, 784))))
 #             img = torch.reshape(y_hot, shape=(-1, 1, 28, 28)).detach()
 #             imgf = torch.cat((images[:n], img), 0)
 #

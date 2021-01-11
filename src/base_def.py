@@ -23,13 +23,13 @@ def base_model_def(data_dict, hparams, cv, seed=42, optimization=False, verbose=
             ## Doo code
             ######################
             # EX:
-            # model.fit(X_train, y_train, )
-            # pred = model.predict(X_val)
+            # mode.fit(X_train, y_train, )
+            # pred = mode.predict(X_val)
             # # pred = [n if n>0 else 0 for n in pred]
             #
             # loss = metric(y_val, pred)
             # total_loss += loss
-            # predictions = model.predict(test)
+            # predictions = mode.predict(test)
             # # predictions = [n if n>0 else 0 for n in predictions]
             # submission[column] += predictions / NFOLDS
     if optimization:

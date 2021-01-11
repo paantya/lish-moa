@@ -5,7 +5,7 @@ from src.layer.recalibrate import recalibrate_layer
 import math
 
 
-# model DenoisingAutoEncoder
+# mode DenoisingAutoEncoder
 class DenoisingAutoEncoder(nn.Module):
     def __init__(self, num_features, hidden_size=[1024, 2048], dropout=0.2, activation=F.leaky_relu):
         super(DenoisingAutoEncoder, self).__init__()
